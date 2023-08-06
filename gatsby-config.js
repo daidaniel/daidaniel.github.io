@@ -4,7 +4,17 @@
 module.exports = {
   siteMetadata: {
     title: `Daniel Dai`,
-    siteUrl: `https://www.yourdomain.tld`
+    siteUrl: `https://daidaniel.github.io`,
   },
-  plugins: ["gatsby-plugin-postcss"]
+  plugins: [
+    "gatsby-plugin-postcss",
+    {
+      resolve: "gatsby-plugin-react-svg",
+      options: {
+        rule: {
+          include: /\.inline\.svg$/,
+        },
+      },
+    },
+  ],
 };
