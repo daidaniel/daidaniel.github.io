@@ -3,25 +3,26 @@ import QK65 from "../images/qk65.png";
 
 const Hero = () => {
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-900">
-      <div className="h-16" />
-      <div className="flex grow items-center justify-center">
-        <div className="flex w-full max-w-7xl flex-col items-center justify-between p-4 xl:flex-row">
-          <div className="max-w-md text-center text-zinc-50 xl:text-left">
-            <h1 className="mb-6 text-6xl font-bold">Daniel Dai</h1>
-            <p className="text-lg">
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-              eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut
-              enim ad minim veniam, quis nostrud exercitation ullamco laboris
-              nisi ut aliquip ex ea commodo consequat.
-            </p>
-          </div>
-          <img
-            src={QK65}
-            alt="QK65"
-            className="mt-10 w-full max-w-2xl xl:mt-0"
-          />
+    <div className="flex min-h-screen items-center justify-center bg-zinc-900 pt-16">
+      <div className="flex w-full max-w-7xl flex-col items-center p-4 xl:flex-row xl:justify-between">
+        <div className="max-w-md text-center text-zinc-50 xl:text-left">
+          <h1 className="mb-6 text-5xl font-semibold xl:text-6xl">
+            Daniel Dai
+          </h1>
+          <p className="mb-8 xl:text-lg">
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+            eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim
+            ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut
+            aliquip ex ea commodo consequat.
+          </p>
+          <a
+            href="/DanielDai_Resume.pdf"
+            class="rounded bg-amber-300 px-6 py-2 font-semibold text-zinc-950 hover:bg-amber-500 xl:text-lg"
+          >
+            Résumé
+          </a>
         </div>
+        <img src={QK65} alt="QK65" className="mt-16 w-full max-w-2xl xl:mt-0" />
       </div>
     </div>
   );
