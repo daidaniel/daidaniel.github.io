@@ -10,10 +10,9 @@ const Hero = () => {
             Daniel Dai
           </h1>
           <p className="mb-8 xl:text-lg">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-            eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim
-            ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut
-            aliquip ex ea commodo consequat.
+            CS major at UCLA. Aspiring front-end developer. Hobbyist UI
+            designer. Mechanical keyboard enthusiast. Passionate problem solver.
+            Lifelong learner and self-starter.
           </p>
           <a
             href="/DanielDai_Resume.pdf"
