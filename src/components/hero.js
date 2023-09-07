@@ -15,7 +15,7 @@ const Hero = () => {
             Lifelong learner and self-starter.
           </p>
           <a
-            href="/DanielDai_Resume.pdf"
+            href="/DanielDai-Resume.pdf"
             class="rounded bg-amber-300 px-6 py-2 font-semibold text-zinc-950 hover:bg-amber-500 xl:text-lg"
           >
             Résumé
