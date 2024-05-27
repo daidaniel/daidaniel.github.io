@@ -10,9 +10,7 @@ const Hero = () => {
             Daniel Dai
           </h1>
           <p className="mb-8 xl:text-lg">
-            CS major at UCLA. Aspiring front-end developer. Hobbyist UI
-            designer. Mechanical keyboard enthusiast. Passionate problem solver.
-            Lifelong learner and self-starter.
+            Currently a <span className="font-semibold">software engineer at TikTok</span>.<br></br>UCLA computer science alumni. Mechanical keyboard enthusiast. Passionate problem solver. Lifelong learner and self-starter.
           </p>
           <a
             href="/DanielDai-Resume.pdf"
