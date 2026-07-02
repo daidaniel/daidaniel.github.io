@@ -1,0 +1,95 @@
+---
+import { Image } from 'astro:assets';
+import Base from '../layouts/Base.astro';
+import keyboard from '../assets/qk65.png';
+
+const description =
+  'Daniel Dai is a software engineer at Apple building test automation and LLM-powered tooling. Previously at TikTok. UCLA computer science alum.';
+---
+
+<Base title="Daniel Dai — Software Engineer" description={description}>
+  <h1>Daniel Dai</h1>
+  <p class="tagline">Software engineer at Apple</p>
+  <p class="blurb">
+    I build test automation and internal tooling at Apple, from dashboards that
+    triage thousands of Bluetooth accessory test results to LLM-powered
+    analytics used across the org. Before that, I was a software engineer at
+    TikTok, building Go microservices that brought event ticketing to 100
+    million daily impressions. UCLA computer science alum, currently pursuing a
+    master's in computer science at UIUC — and a mechanical keyboard
+    enthusiast.
+  </p>
+  <ul class="links" role="list">
+    <li><a class="button" href="/DanielDai-Resume.pdf">Résumé</a></li>
+    <li><a href="https://github.com/daidaniel">GitHub</a></li>
+    <li><a href="https://www.linkedin.com/in/daidaniel">LinkedIn</a></li>
+    <li><a href="mailto:danieldaiw@gmail.com">Email</a></li>
+  </ul>
+  <figure>
+    <Image
+      src={keyboard}
+      alt="QK65 mechanical keyboard with white keycaps"
+      widths={[480, 768, 1152, 1536]}
+      sizes="(max-width: 45rem) calc(100vw - 3rem), 39rem"
+    />
+    <figcaption>QK65, my mechanical keyboard of choice.</figcaption>
+  </figure>
+</Base>
+
+<style>
+  h1 {
+    margin-top: clamp(2rem, 8vh, 5rem);
+    font-size: clamp(2.5rem, 2rem + 2.5vw, 3.5rem);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+
+  .tagline {
+    margin-top: 0.75rem;
+    color: var(--color-text-muted);
+    font-size: 1.125rem;
+  }
+
+  .blurb {
+    margin-top: 2rem;
+    color: var(--color-text-soft);
+    text-wrap: pretty;
+  }
+
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem 1.75rem;
+    margin-top: 2.5rem;
+    padding: 0;
+    list-style: none;
+  }
+
+  .button {
+    display: inline-block;
+    padding: 0.5rem 1.5rem;
+    border-radius: 0.25rem;
+    background-color: var(--color-accent);
+    color: var(--color-on-accent);
+    font-weight: 600;
+    transition: background-color 150ms ease;
+  }
+
+  .button:hover {
+    background-color: var(--color-accent-hover);
+    text-decoration: none;
+  }
+
+  figure {
+    margin-block: clamp(3.5rem, 10vh, 6rem) 1rem;
+  }
+
+  figcaption {
+    margin-top: 1.25rem;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    text-align: center;
+  }
+</style>

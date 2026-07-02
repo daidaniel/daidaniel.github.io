@@ -1,0 +1,72 @@
+---
+import { Font } from 'astro:assets';
+import Logo from '../components/Logo.astro';
+import keyboard from '../assets/qk65.png';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const ogImage = new URL(keyboard.src, Astro.site);
+const year = new Date().getFullYear();
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#18181b" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <Font cssVariable="--font-inter" preload />
+  </head>
+  <body>
+    <header class="column">
+      <a href="/" aria-label="Daniel Dai — home">
+        <Logo class="logo" />
+      </a>
+    </header>
+    <main class="column">
+      <slot />
+    </main>
+    <footer class="column">
+      <p>© {year} Daniel Dai</p>
+    </footer>
+  </body>
+</html>
+
+<style>
+  header {
+    padding-block: 2.5rem;
+  }
+
+  header a {
+    display: inline-block;
+    line-height: 0;
+  }
+
+  .logo {
+    width: auto;
+    height: 2rem;
+  }
+
+  footer {
+    padding-block: 2.5rem;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+  }
+</style>

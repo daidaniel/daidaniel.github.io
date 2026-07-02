@@ -1,0 +1,18 @@
+// @ts-check
+import { defineConfig, fontProviders } from 'astro/config';
+
+// https://astro.build/config
+export default defineConfig({
+  site: 'https://daidaniel.github.io',
+  fonts: [
+    {
+      provider: fontProviders.fontsource(),
+      name: 'Inter',
+      cssVariable: '--font-inter',
+      weights: [400, 600],
+      styles: ['normal'],
+      subsets: ['latin'],
+      fallbacks: ['ui-sans-serif', 'system-ui', 'sans-serif'],
+    },
+  ],
+});
