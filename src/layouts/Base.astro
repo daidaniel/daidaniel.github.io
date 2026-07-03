@@ -1,6 +1,5 @@
 ---
 import { Font, getImage } from 'astro:assets';
-import Logo from '../components/Logo.astro';
 import keyboard from '../assets/qk65.png';
 import '../styles/global.css';
 
@@ -36,11 +35,6 @@ const year = new Date().getFullYear();
     <Font cssVariable="--font-inter" preload />
   </head>
   <body>
-    <header class="column">
-      <a href="/" aria-label="Daniel Dai — home">
-        <Logo class="logo" />
-      </a>
-    </header>
     <main class="column">
       <slot />
     </main>
@@ -51,22 +45,13 @@ const year = new Date().getFullYear();
 </html>
 
 <style>
-  header {
-    padding-block: 2.5rem;
-  }
-
-  header a {
-    display: inline-block;
-    line-height: 0;
-  }
-
-  .logo {
-    width: auto;
-    height: 2rem;
+  /* Single top-spacing knob; svh so mobile browser chrome doesn't inflate it. */
+  main {
+    padding-block-start: clamp(1.5rem, 6svh, 4rem);
   }
 
   footer {
-    padding-block: 2.5rem;
+    padding-block: 1.5rem;
     color: var(--color-text-muted);
     font-size: 0.875rem;
   }

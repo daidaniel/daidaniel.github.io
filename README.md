@@ -21,8 +21,7 @@ Personal website for Daniel Dai, built with [Astro](https://astro.build). A sing
 │   └── favicon.svg
 ├── src/
 │   ├── assets/qk65.png            Keyboard photo (optimized at build time)
-│   ├── components/Logo.astro      D² logo mark
-│   ├── layouts/Base.astro         Shared head, header, and footer
+│   ├── layouts/Base.astro         Shared head and footer
 │   ├── pages/                     index.astro and 404.astro
 │   └── styles/global.css          Palette variables and base styles
 └── astro.config.mjs               Site URL and self-hosted Inter font
