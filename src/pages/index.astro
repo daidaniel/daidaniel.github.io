@@ -4,24 +4,34 @@ import Base from '../layouts/Base.astro';
 import keyboard from '../assets/qk65.png';
 
 const description =
-  'Daniel Dai is a software engineer at Apple building test automation and LLM-powered tooling. Previously at TikTok. UCLA computer science alum.';
+  'Daniel Dai is a software engineer at Apple building AI-powered internal tooling. Previously at TikTok. UCLA computer science alum.';
 ---
 
 <Base title="Daniel Dai — Software Engineer" description={description}>
-  <h1 class="text-[clamp(2.5rem,2rem_+_2.5vw,3.5rem)] font-semibold leading-[1.1] tracking-[-0.02em]">
+  <figure>
+    <Image
+      src={keyboard}
+      alt="QK65 mechanical keyboard with white keycaps"
+      widths={[480, 768, 1152, 1536]}
+      sizes="(max-width: 45rem) calc(100vw - 3rem), 39rem"
+      loading="eager"
+      fetchpriority="high"
+    />
+  </figure>
+  <h1 class="mt-10 text-[clamp(2.5rem,2rem_+_2.5vw,3.5rem)] font-semibold leading-[1.1] tracking-[-0.02em]">
     Daniel Dai
   </h1>
   <p class="mt-3 text-lg leading-[1.7] text-zinc-400">Software engineer at Apple</p>
   <p class="mt-6 text-pretty text-zinc-300">
-    I build test automation and LLM-powered internal tooling at Apple. Before
-    that, I built Go microservices at TikTok serving event ticketing at 100
-    million daily impressions. UCLA computer science alum, now a master's
-    student at UIUC — and a mechanical keyboard enthusiast.
+    I build AI-powered internal tooling at Apple. Before that, I built Go
+    microservices at TikTok serving event ticketing at 100 million daily
+    impressions. UCLA computer science alum, now a master's student at UIUC —
+    and a mechanical keyboard enthusiast.
   </p>
-  <ul class="mt-8 flex flex-wrap items-center gap-x-7 gap-y-4" role="list">
+  <ul class="mt-8 flex flex-wrap items-center gap-x-4 gap-y-4 sm:gap-x-7" role="list">
     <li>
       <a
-        class="inline-block rounded bg-amber-300 px-6 py-2 font-semibold text-zinc-950 transition-colors hover:bg-amber-500 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-amber-300"
+        class="inline-block rounded bg-amber-300 px-5 py-2 font-semibold text-zinc-950 transition-colors hover:bg-amber-500 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-amber-300 sm:px-6"
         href="/DanielDai-Resume.pdf">Résumé</a
       >
     </li>
@@ -44,12 +54,4 @@ const description =
       >
     </li>
   </ul>
-  <figure class="mt-[clamp(2.5rem,6svh,4rem)]">
-    <Image
-      src={keyboard}
-      alt="QK65 mechanical keyboard with white keycaps"
-      widths={[480, 768, 1152, 1536]}
-      sizes="(max-width: 45rem) calc(100vw - 3rem), 39rem"
-    />
-  </figure>
 </Base>
