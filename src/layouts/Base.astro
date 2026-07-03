@@ -34,25 +34,15 @@ const year = new Date().getFullYear();
     <meta name="twitter:card" content="summary_large_image" />
     <Font cssVariable="--font-inter" preload />
   </head>
-  <body>
-    <main class="column">
+  <body
+    class="flex min-h-svh flex-col bg-zinc-900 font-(family-name:--font-inter) text-[1.0625rem] leading-[1.7] text-zinc-50 antialiased selection:bg-amber-300 selection:text-zinc-950"
+  >
+    <!-- pt clamp is the single top-spacing knob; svh so mobile browser chrome doesn't inflate it. -->
+    <main class="mx-auto w-full max-w-2xl flex-1 px-6 pt-[clamp(1.5rem,6svh,4rem)]">
       <slot />
     </main>
-    <footer class="column">
+    <footer class="mx-auto w-full max-w-2xl px-6 py-6 text-sm leading-[1.7] text-zinc-400">
       <p>© {year} Daniel Dai</p>
     </footer>
   </body>
 </html>
-
-<style>
-  /* Single top-spacing knob; svh so mobile browser chrome doesn't inflate it. */
-  main {
-    padding-block-start: clamp(1.5rem, 6svh, 4rem);
-  }
-
-  footer {
-    padding-block: 1.5rem;
-    color: var(--color-text-muted);
-    font-size: 0.875rem;
-  }
-</style>
