@@ -10,10 +10,23 @@ const description =
 ---
 
 <Base title="Daniel Dai — Software Engineer" description={description}>
-  <figure class="relative motion-safe:animate-fade-up md:translate-x-6">
-    <img class="long-shadow absolute inset-0 w-full" src={shadow.src} alt="" />
+  <!-- Below sm the keyboard keeps the size it has at the sm boundary (592px =
+       640px viewport minus px-6) and the figure clips its right side, so the
+       fixed-px long shadow stays proportional at every mobile width. The -mr-6
+       bleeds the clip edge through main's right padding to the viewport edge.
+       The mb calc cancels the transparent band under the keyboard's diagonal
+       bottom edge (slope 1/3): band = 152px - width/3 (width = content width;
+       the visible clip is width + 24px bleed), gone once the full keyboard fits. -->
+  <figure
+    class="relative motion-safe:animate-fade-up max-sm:-mr-6 max-sm:mb-[min(0px,33.333%_-_152px)] max-sm:overflow-x-clip md:translate-x-6"
+  >
+    <img
+      class="long-shadow absolute inset-0 w-[592px] max-w-none sm:w-full"
+      src={shadow.src}
+      alt=""
+    />
     <Image
-      class="relative"
+      class="relative w-[592px] max-w-none sm:w-full"
       src={keyboard}
       alt="QK65 mechanical keyboard with white keycaps"
       loading="eager"
@@ -22,7 +35,7 @@ const description =
   </figure>
   <div class="md:-translate-x-6">
     <h1
-      class="type-out mt-12 [--type-chars:10] text-[clamp(2.5rem,2rem_+_2.5vw,3.5rem)] font-semibold leading-[1.1]"
+      class="type-out mt-12 [--type-chars:10] text-[2.5rem] font-semibold leading-[1.1] sm:text-[3rem] md:text-[3.5rem]"
     >
       Daniel Dai
     </h1>

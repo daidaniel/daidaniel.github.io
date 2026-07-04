@@ -49,7 +49,7 @@ const year = new Date().getFullYear();
          clamp is the minimum breathing room; svh so mobile browser chrome doesn't
          inflate it. -->
     <main
-      class="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-[clamp(1.5rem,6svh,4rem)]"
+      class="mx-auto flex w-full max-w-[40rem] flex-1 flex-col justify-center px-6 py-[clamp(1.5rem,6svh,4rem)] md:max-w-2xl"
     >
       <slot />
     </main>
