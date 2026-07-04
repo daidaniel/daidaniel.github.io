@@ -44,9 +44,12 @@ const year = new Date().getFullYear();
   <body
     class="flex min-h-svh flex-col bg-zinc-900 font-(family-name:--font-inter) text-[1.0625rem] leading-[1.7] text-zinc-50 antialiased selection:bg-amber-300 selection:text-zinc-950"
   >
-    <!-- pt clamp is the single top-spacing knob; svh so mobile browser chrome doesn't inflate it. -->
+    <!-- Content centers in the leftover viewport height; body is min-h (not fixed),
+         so overflowing content just grows the page and scrolls normally. The py
+         clamp is the minimum breathing room; svh so mobile browser chrome doesn't
+         inflate it. -->
     <main
-      class="mx-auto w-full max-w-2xl flex-1 px-6 pt-[clamp(1.5rem,6svh,4rem)]"
+      class="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-[clamp(1.5rem,6svh,4rem)]"
     >
       <slot />
     </main>
