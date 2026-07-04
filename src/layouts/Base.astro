@@ -1,0 +1,62 @@
+---
+import { Font, getImage } from "astro:assets";
+import keyboard from "../assets/keyboard.svg";
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const og = await getImage({ src: keyboard, width: 1200, format: "jpg" });
+const ogImage = new URL(og.src, Astro.site);
+const year = new Date().getFullYear();
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#18181b" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content={og.attributes.width} />
+    <meta property="og:image:height" content={og.attributes.height} />
+    <meta
+      property="og:image:alt"
+      content="QK65 mechanical keyboard with white keycaps"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <Font cssVariable="--font-inter" preload />
+    <Font cssVariable="--font-jetbrains-mono" preload />
+  </head>
+  <body
+    class="flex flex-col min-h-svh font-(family-name:--font-inter) text-[1.0625rem] leading-[1.7] text-zinc-50 antialiased bg-zinc-900 selection:bg-amber-300 selection:text-zinc-950"
+  >
+    <!-- Content centers in the leftover viewport height; body is min-h (not fixed),
+         so overflowing content just grows the page and scrolls normally. The py
+         clamp is the minimum breathing room; svh so mobile browser chrome doesn't
+         inflate it. -->
+    <main
+      class="flex flex-1 flex-col justify-center mx-auto w-full max-w-[40rem] px-6 py-[clamp(1.5rem,6svh,4rem)] md:max-w-2xl"
+    >
+      <slot />
+    </main>
+    <footer
+      class="mx-auto w-full max-w-2xl p-6 text-center text-xs leading-[1.7] text-zinc-500"
+    >
+      <p>© {year} Daniel Dai</p>
+    </footer>
+  </body>
+</html>

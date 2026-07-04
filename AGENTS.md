@@ -1,0 +1,28 @@
+## Conventions
+
+- pnpm is the package manager. Deploys to GitHub Pages from `master` via `.github/workflows/deploy.yml`.
+- Single-page static site with no client-side JavaScript — animations (type-out title, fade-up, long shadow) are pure CSS custom utilities in `src/styles/global.css`.
+- Styling is Tailwind v4 utility classes; format with Prettier (`prettier-plugin-astro`, configured in `package.json`).
+
+## Development
+
+When starting the dev server, use background mode:
+
+```
+astro dev --background
+```
+
+Manage the background server with `astro dev stop`, `astro dev status`, and `astro dev logs`.
+
+## Documentation
+
+Full documentation: https://docs.astro.build
+
+Consult these guides before working on related tasks:
+
+- [Adding pages, dynamic routes, or middleware](https://docs.astro.build/en/guides/routing/)
+- [Working with Astro components](https://docs.astro.build/en/basics/astro-components/)
+- [Using React, Vue, Svelte, or other framework components](https://docs.astro.build/en/guides/framework-components/)
+- [Adding or managing content](https://docs.astro.build/en/guides/content-collections/)
+- [Adding styles or using Tailwind](https://docs.astro.build/en/guides/styling/)
+- [Supporting multiple languages](https://docs.astro.build/en/guides/internationalization/)
