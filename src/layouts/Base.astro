@@ -42,19 +42,19 @@ const year = new Date().getFullYear();
     <Font cssVariable="--font-jetbrains-mono" preload />
   </head>
   <body
-    class="flex min-h-svh flex-col bg-zinc-900 font-(family-name:--font-inter) text-[1.0625rem] leading-[1.7] text-zinc-50 antialiased selection:bg-amber-300 selection:text-zinc-950"
+    class="flex flex-col min-h-svh font-(family-name:--font-inter) text-[1.0625rem] leading-[1.7] text-zinc-50 antialiased bg-zinc-900 selection:bg-amber-300 selection:text-zinc-950"
   >
     <!-- Content centers in the leftover viewport height; body is min-h (not fixed),
          so overflowing content just grows the page and scrolls normally. The py
          clamp is the minimum breathing room; svh so mobile browser chrome doesn't
          inflate it. -->
     <main
-      class="mx-auto flex w-full max-w-[40rem] flex-1 flex-col justify-center px-6 py-[clamp(1.5rem,6svh,4rem)] md:max-w-2xl"
+      class="flex flex-1 flex-col justify-center mx-auto w-full max-w-[40rem] px-6 py-[clamp(1.5rem,6svh,4rem)] md:max-w-2xl"
     >
       <slot />
     </main>
     <footer
-      class="mx-auto w-full max-w-2xl px-6 py-6 text-center text-xs leading-[1.7] text-zinc-500"
+      class="mx-auto w-full max-w-2xl p-6 text-center text-xs leading-[1.7] text-zinc-500"
     >
       <p>© {year} Daniel Dai</p>
     </footer>
