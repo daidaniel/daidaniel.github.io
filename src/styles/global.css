@@ -63,3 +63,36 @@ html {
         var(--color-zinc-950)
     );
 }
+
+/* Terminal type-out: width steps reveal one monospace character per tick;
+   border-right is the cursor. Blink is delayed past the typing duration so
+   the cursor stays solid while "typing", then blinks forever. Width (in ch)
+   is set at the call site to match the character count of the text. */
+@utility type-out {
+  /* content-box so the cursor border isn't subtracted from the ch width */
+  box-sizing: content-box;
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-family: var(--font-jetbrains-mono);
+  border-right: 1ch solid var(--color-amber-300);
+  animation:
+    typing 1s steps(10) 150ms backwards,
+    blink 1.1s step-end 1.15s infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none; /* full text immediately, solid cursor */
+  }
+}
+
+@keyframes typing {
+  from {
+    width: 0;
+  }
+}
+@keyframes blink {
+  50% {
+    border-color: transparent;
+  }
+}
