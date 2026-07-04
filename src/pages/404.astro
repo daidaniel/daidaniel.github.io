@@ -1,4 +1,5 @@
 ---
+import TextLink from "../components/TextLink.astro";
 import Base from "../layouts/Base.astro";
 ---
 
@@ -14,9 +15,6 @@ import Base from "../layouts/Base.astro";
   <p
     class="mt-6 text-zinc-300 motion-safe:animate-fade-up [animation-delay:100ms]"
   >
-    There's nothing here. <a
-      class="text-amber-300 underline-offset-[0.25em] transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-amber-300"
-      href="/">Head back home</a
-    >.
+    There's nothing here. <TextLink href="/">Head back home</TextLink>.
   </p>
 </Base>
