@@ -2,14 +2,17 @@
 import { Image } from "astro:assets";
 import Base from "../layouts/Base.astro";
 import keyboard from "../assets/keyboard.svg";
+import shadow from "../assets/shadow.svg";
 
 const description =
   "Daniel Dai is a software engineer at Apple building AI-powered internal tooling. Previously at TikTok. UCLA computer science alum.";
 ---
 
 <Base title="Daniel Dai — Software Engineer" description={description}>
-  <figure class="motion-safe:animate-fade-up">
+  <figure class="relative motion-safe:animate-fade-up">
+    <img class="long-shadow absolute inset-0 w-full" src={shadow.src} alt="" />
     <Image
+      class="relative"
       src={keyboard}
       alt="QK65 mechanical keyboard with white keycaps"
       loading="eager"

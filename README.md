@@ -21,6 +21,7 @@ Personal website for Daniel Dai, built with [Astro](https://astro.build). A sing
 │   └── favicon.svg
 ├── src/
 │   ├── assets/keyboard.svg        Keyboard illustration (rasterized for the OG image at build time)
+│   ├── assets/shadow.svg          Keyboard base footprint, extruded into the long shadow via CSS
 │   ├── layouts/Base.astro         Shared head and footer
 │   ├── pages/                     index.astro and 404.astro
 │   └── styles/global.css          Palette variables and base styles
