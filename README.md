@@ -4,13 +4,13 @@ Personal website for Daniel Dai, built with [Astro](https://astro.build). A sing
 
 ## Commands
 
-| Command        | Action                                       |
-| -------------- | -------------------------------------------- |
-| `pnpm install` | Install dependencies                         |
-| `pnpm dev`     | Start the dev server at `localhost:4321`     |
-| `pnpm build`   | Build the production site into `dist/`       |
-| `pnpm preview` | Preview the production build locally         |
-| `pnpm check`   | Type-check the project (`astro check`)       |
+| Command        | Action                                   |
+| -------------- | ---------------------------------------- |
+| `pnpm install` | Install dependencies                     |
+| `pnpm dev`     | Start the dev server at `localhost:4321` |
+| `pnpm build`   | Build the production site into `dist/`   |
+| `pnpm preview` | Preview the production build locally     |
+| `pnpm check`   | Type-check the project (`astro check`)   |
 
 ## Structure
 

@@ -1,11 +1,11 @@
 // @ts-check
-import { defineConfig, fontProviders } from 'astro/config';
+import { defineConfig, fontProviders } from "astro/config";
 
-import tailwindcss from '@tailwindcss/vite';
+import tailwindcss from "@tailwindcss/vite";
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://daidaniel.github.io',
+  site: "https://daidaniel.github.io",
 
   image: {
     // Lets sharp rasterize our own keyboard.svg into the OG-card jpg.
@@ -15,21 +15,21 @@ export default defineConfig({
   fonts: [
     {
       provider: fontProviders.fontsource(),
-      name: 'Inter',
-      cssVariable: '--font-inter',
+      name: "Inter",
+      cssVariable: "--font-inter",
       weights: [400, 600],
-      styles: ['normal'],
-      subsets: ['latin'],
-      fallbacks: ['ui-sans-serif', 'system-ui', 'sans-serif'],
+      styles: ["normal"],
+      subsets: ["latin"],
+      fallbacks: ["ui-sans-serif", "system-ui", "sans-serif"],
     },
     {
       provider: fontProviders.fontsource(),
-      name: 'JetBrains Mono',
-      cssVariable: '--font-jetbrains-mono',
+      name: "JetBrains Mono",
+      cssVariable: "--font-jetbrains-mono",
       weights: [600],
-      styles: ['normal'],
-      subsets: ['latin'],
-      fallbacks: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+      styles: ["normal"],
+      subsets: ["latin"],
+      fallbacks: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
     },
   ],
 
