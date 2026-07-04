@@ -3,10 +3,10 @@ import Base from '../layouts/Base.astro';
 ---
 
 <Base title="Page not found — Daniel Dai" description="This page doesn't exist.">
-  <h1 class="text-[clamp(2rem,1.5rem_+_2.5vw,3rem)] font-semibold leading-[1.1] tracking-[-0.02em]">
+  <h1 class="text-[clamp(2rem,1.5rem_+_2.5vw,3rem)] font-semibold leading-[1.1] tracking-[-0.02em] motion-safe:animate-fade-up">
     Page not found
   </h1>
-  <p class="mt-6 text-zinc-300">
+  <p class="mt-6 text-zinc-300 motion-safe:animate-fade-up [animation-delay:100ms]">
     There's nothing here. <a
       class="text-amber-300 underline-offset-[0.25em] transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-amber-300"
       href="/">Head back home</a
