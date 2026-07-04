@@ -22,10 +22,11 @@ Personal website for Daniel Dai, built with [Astro](https://astro.build). A sing
 ├── src/
 │   ├── assets/keyboard.svg        Keyboard illustration (rasterized for the OG image at build time)
 │   ├── assets/shadow.svg          Keyboard base footprint, extruded into the long shadow via CSS
+│   ├── components/TextLink.astro  Amber inline link
 │   ├── layouts/Base.astro         Shared head and footer
 │   ├── pages/                     index.astro and 404.astro
 │   └── styles/global.css          Palette variables and base styles
-└── astro.config.mjs               Site URL and self-hosted Inter font
+└── astro.config.mjs               Site URL and self-hosted fonts (Inter, JetBrains Mono)
 ```
 
 ## Deployment

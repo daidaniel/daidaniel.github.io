@@ -1,3 +1,9 @@
+## Conventions
+
+- pnpm is the package manager. Deploys to GitHub Pages from `master` via `.github/workflows/deploy.yml`.
+- Single-page static site with no client-side JavaScript — animations (type-out title, fade-up, long shadow) are pure CSS custom utilities in `src/styles/global.css`.
+- Styling is Tailwind v4 utility classes; format with Prettier (`prettier-plugin-astro`, configured in `package.json`).
+
 ## Development
 
 When starting the dev server, use background mode:
