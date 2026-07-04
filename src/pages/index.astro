@@ -1,7 +1,7 @@
 ---
 import { Image } from "astro:assets";
 import Base from "../layouts/Base.astro";
-import keyboard from "../assets/qk65.png";
+import keyboard from "../assets/keyboard.svg";
 
 const description =
   "Daniel Dai is a software engineer at Apple building AI-powered internal tooling. Previously at TikTok. UCLA computer science alum.";
@@ -12,8 +12,6 @@ const description =
     <Image
       src={keyboard}
       alt="QK65 mechanical keyboard with white keycaps"
-      widths={[480, 768, 1152, 1536]}
-      sizes="(max-width: 45rem) calc(100vw - 3rem), 39rem"
       loading="eager"
       fetchpriority="high"
     />

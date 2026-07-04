@@ -20,7 +20,7 @@ Personal website for Daniel Dai, built with [Astro](https://astro.build). A sing
 │   ├── DanielDai-Resume.pdf       Résumé (served at /DanielDai-Resume.pdf)
 │   └── favicon.svg
 ├── src/
-│   ├── assets/qk65.png            Keyboard photo (optimized at build time)
+│   ├── assets/keyboard.svg        Keyboard illustration (rasterized for the OG image at build time)
 │   ├── layouts/Base.astro         Shared head and footer
 │   ├── pages/                     index.astro and 404.astro
 │   └── styles/global.css          Palette variables and base styles

@@ -7,6 +7,11 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   site: 'https://daidaniel.github.io',
 
+  image: {
+    // Lets sharp rasterize our own keyboard.svg into the OG-card jpg.
+    dangerouslyProcessSVG: true,
+  },
+
   fonts: [
     {
       provider: fontProviders.fontsource(),
