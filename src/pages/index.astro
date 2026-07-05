@@ -11,17 +11,21 @@ const description =
 
 <Base title="Daniel Dai — Software Engineer" description={description}>
   <!-- Below sm the keyboard keeps the size it has at the sm boundary (592px =
-       640px viewport minus px-6) and the figure clips its right side, so the
-       fixed-px long shadow stays proportional at every mobile width. The -mr-6
-       bleeds the clip edge through main's right padding to the viewport edge.
-       The mb calc cancels the transparent band under the keyboard's diagonal
-       bottom edge (slope 1/3): band = 152px - width/3 (width = content width;
-       the visible clip is width + 24px bleed), gone once the full keyboard fits. -->
+       640px viewport minus px-6) — a design choice to stay large — and the
+       figure clips its right side. The -mr-6 bleeds the clip edge through
+       main's right padding to the viewport edge. The mb calc cancels the
+       transparent band under the keyboard's diagonal bottom edge (slope 1/3):
+       band = 152px - width/3 (width = content width; the visible clip is
+       width + 24px bleed), gone once the full keyboard fits. -->
   <figure
     class="relative max-sm:-mr-6 max-sm:mb-[min(0px,33.333%_-_152px)] max-sm:overflow-x-clip md:translate-x-6 motion-safe:animate-fade-up"
   >
+    <!-- The shadow SVG's canvas (2196×1106) is larger than the keyboard's
+         (1979×1017) because it contains the baked long shadow; their
+         bottom-left corners coincide, so anchor bottom-left and scale the
+         width by 2196/1979 to keep both SVGs at equal units-per-pixel. -->
     <img
-      class="long-shadow absolute inset-0 w-[592px] max-w-none sm:w-full"
+      class="absolute bottom-0 left-0 w-[calc(592px*2196/1979)] max-w-none sm:w-[calc(100%*2196/1979)]"
       src={shadow.src}
       alt=""
     />
@@ -39,19 +43,13 @@ const description =
     >
       Daniel Dai
     </h1>
-    <p
-      class="mt-3 text-lg leading-[1.7] text-zinc-400 [animation-delay:175ms] motion-safe:animate-fade-up"
-    >
+    <p class="mt-3 text-lg leading-[1.7] text-zinc-400 [animation-delay:175ms] motion-safe:animate-fade-up">
       Software engineer at Apple
     </p>
-    <p
-      class="mt-6 text-pretty text-zinc-300 [animation-delay:250ms] motion-safe:animate-fade-up"
-    >
-      I build software across the stack, from AI-powered internal tools at Apple
-      to backend microservices at TikTok serving millions of users. UCLA
-      computer science alum, currently pursuing a master's at UIUC, with a
-      passion for building simple, reliable software—and optimizing everything
-      from developer workflows to custom keyboards.
+    <p class="mt-6 text-pretty text-zinc-300 [animation-delay:250ms] motion-safe:animate-fade-up">
+      I build software across the stack, from AI-powered internal tools at Apple to backend microservices at TikTok
+      serving millions of users. UCLA computer science alum, currently pursuing a master's at UIUC, with a passion for
+      building simple, reliable software—and optimizing everything from developer workflows to custom keyboards.
     </p>
     <ul
       class="flex flex-wrap items-center gap-4 mt-8 [animation-delay:325ms] sm:gap-x-7 motion-safe:animate-fade-up"
@@ -67,9 +65,7 @@ const description =
         <TextLink href="https://github.com/daidaniel">GitHub</TextLink>
       </li>
       <li>
-        <TextLink href="https://www.linkedin.com/in/daidaniel"
-          >LinkedIn</TextLink
-        >
+        <TextLink href="https://www.linkedin.com/in/daidaniel">LinkedIn</TextLink>
       </li>
       <li>
         <TextLink href="mailto:danieldaiw@gmail.com">Email</TextLink>
