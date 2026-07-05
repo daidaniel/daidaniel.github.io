@@ -15,29 +15,6 @@ html {
   color-scheme: dark;
 }
 
-/* Hard flat long shadow extruding the element's alpha silhouette (applied
-   to the base-shadow layer behind the hero keyboard). Zero-blur
-   drop-shadows compound: each layer also shadows the previous layers'
-   output, so doubling the offsets (1,1,2,4) yields solid copies at every
-   12px multiple out to 8x the base offset — a short crisp streak with no
-   visible stepping along its edges.
-   Knobs: --shadow-angle (0deg = right, 90deg = up), shadow color below. */
-@utility long-shadow {
-  --shadow-angle: 25.5deg;
-  --shadow-x: calc(cos(var(--shadow-angle)) * 12px);
-  --shadow-y: calc(sin(var(--shadow-angle)) * -25px);
-  filter: drop-shadow(var(--shadow-x) var(--shadow-y) 0 var(--color-zinc-950))
-    drop-shadow(var(--shadow-x) var(--shadow-y) 0 var(--color-zinc-950))
-    drop-shadow(
-      calc(var(--shadow-x) * 2) calc(var(--shadow-y) * 2) 0
-        var(--color-zinc-950)
-    )
-    drop-shadow(
-      calc(var(--shadow-x) * 4) calc(var(--shadow-y) * 4) 0
-        var(--color-zinc-950)
-    );
-}
-
 /* Terminal type-out: width steps reveal one monospace character per tick;
    border-right is the cursor. Blink is delayed past the typing duration so
    the cursor stays solid while "typing", then blinks forever. The call site
