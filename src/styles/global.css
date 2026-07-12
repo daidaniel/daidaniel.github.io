@@ -15,6 +15,13 @@ html {
   color-scheme: dark;
 }
 
+/* Anchor navigation (the hero's down arrow) glides instead of jumping. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 /* Terminal type-out: width steps reveal one monospace character per tick;
    border-right is the cursor. Blink is delayed past the typing duration so
    the cursor stays solid while "typing", then blinks forever. The call site

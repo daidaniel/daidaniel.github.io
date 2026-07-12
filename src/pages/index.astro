@@ -1,75 +1,125 @@
 ---
 import { Image } from "astro:assets";
-import TextLink from "../components/TextLink.astro";
+import Section from "../components/Section.astro";
 import Base from "../layouts/Base.astro";
 import keyboard from "../assets/keyboard.svg";
 import shadow from "../assets/shadow.svg";
 
 const description =
-  "Daniel Dai is a software engineer at Apple building AI-powered internal tooling. Previously at TikTok. UCLA computer science alum.";
+  "the personal site of Daniel Dai: software engineer at Apple, previously TikTok, UCLA computer science grad.";
+
+// [aria-label, href, svg inner markup] — icons inherit fill="currentColor" from the <svg> wrapper
+const iconLinks = [
+  [
+    "GitHub",
+    "https://github.com/daidaniel",
+    `<path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>`,
+  ],
+  [
+    "LinkedIn",
+    "https://www.linkedin.com/in/daidaniel",
+    `<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>`,
+  ],
+  [
+    "email",
+    "mailto:danieldaiw@gmail.com",
+    `<rect x="2.75" y="4.75" width="18.5" height="14.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m3.5 7.25 8.5 5.5 8.5-5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`,
+  ],
+];
 ---
 
-<Base title="Daniel Dai — Software Engineer" description={description}>
-  <!-- Below sm the keyboard keeps the size it has at the sm boundary (592px =
+<Base title="Daniel Dai · software engineer" description={description}>
+  <Section>
+    <!-- Below sm the keyboard keeps the size it has at the sm boundary (592px =
        640px viewport minus px-6) — a design choice to stay large — and the
        figure clips its right side. The -mr-6 bleeds the clip edge through
-       main's right padding to the viewport edge. The mb calc cancels the
+       the Section container's right padding to the viewport edge. The mb calc cancels the
        transparent band under the keyboard's diagonal bottom edge (slope 1/3):
        band = 152px - width/3 (width = content width; the visible clip is
        width + 24px bleed), gone once the full keyboard fits. -->
-  <figure
-    class="relative max-sm:-mr-6 max-sm:mb-[min(0px,33.333%_-_152px)] max-sm:overflow-x-clip md:translate-x-6 motion-safe:animate-fade-up"
-  >
-    <!-- The shadow SVG's canvas (2196×1106) is larger than the keyboard's
+    <figure
+      class="relative max-sm:-mr-6 max-sm:mb-[min(0px,33.333%_-_152px)] max-sm:overflow-x-clip md:translate-x-6 motion-safe:animate-fade-up"
+    >
+      <!-- The shadow SVG's canvas (2196×1106) is larger than the keyboard's
          (1979×1017) because it contains the baked long shadow; their
          bottom-left corners coincide, so anchor bottom-left and scale the
          width by 2196/1979 to keep both SVGs at equal units-per-pixel. -->
-    <img
-      class="absolute bottom-0 left-0 w-[calc(592px*2196/1979)] max-w-none sm:w-[calc(100%*2196/1979)]"
-      src={shadow.src}
-      alt=""
-    />
-    <Image
-      class="relative w-[592px] max-w-none sm:w-full"
-      src={keyboard}
-      alt="QK65 mechanical keyboard with white keycaps"
-      loading="eager"
-      fetchpriority="high"
-    />
-  </figure>
-  <div class="md:-translate-x-6">
-    <h1
-      class="type-out mt-12 text-[2.5rem] font-semibold leading-[1.1] [--type-chars:10] sm:text-[3rem] md:text-[3.5rem]"
+      <img
+        class="absolute bottom-0 left-0 w-[calc(592px*2196/1979)] max-w-none sm:w-[calc(100%*2196/1979)]"
+        src={shadow.src}
+        alt=""
+      />
+      <Image
+        class="relative w-[592px] max-w-none sm:w-full"
+        src={keyboard}
+        alt="QK65 mechanical keyboard with white keycaps"
+        loading="eager"
+        fetchpriority="high"
+      />
+    </figure>
+    <div class="md:-translate-x-6">
+      <h1
+        class="type-out mt-12 text-[2.5rem] font-semibold leading-[1.1] [--type-chars:10] sm:text-[3rem] md:text-[3.5rem]"
+      >
+        Daniel Dai
+      </h1>
+      <p class="mt-3 text-lg leading-[1.7] text-zinc-400 [animation-delay:175ms] motion-safe:animate-fade-up">
+        software engineer at Apple
+      </p>
+      <p class="mt-6 text-pretty text-zinc-300 [animation-delay:250ms] motion-safe:animate-fade-up">
+        i build software across the stack: AI-powered internal tools at Apple now, backend microservices serving
+        millions of users at TikTok before that. UCLA computer science alum, currently pursuing a master's at UIUC. i
+        care about clean, reliable software, and i optimize everything from dev workflows to custom keyboards.
+      </p>
+      <ul
+        class="flex flex-wrap items-center gap-4 mt-8 [animation-delay:325ms] sm:gap-x-7 motion-safe:animate-fade-up"
+        role="list"
+      >
+        <li>
+          <a
+            class="inline-block px-5 py-2 font-semibold text-zinc-950 rounded bg-amber-300 transition-colors sm:px-6 hover:bg-amber-400 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-amber-300"
+            href="/DanielDai-Resume.pdf">resume</a
+          >
+        </li>
+        {
+          iconLinks.map(([label, href, icon]) => (
+            <li>
+              <a
+                href={href}
+                aria-label={label}
+                class="flex p-1 text-zinc-400 transition-colors hover:text-amber-300 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-amber-300"
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                  set:html={icon}
+                />
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+    <a
+      href="#more"
+      aria-label="scroll down"
+      class="absolute bottom-6 left-1/2 -translate-x-1/2 p-2 text-zinc-500 transition-colors [animation-delay:500ms] hover:text-amber-300 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-amber-300 motion-safe:animate-fade-up"
     >
-      Daniel Dai
-    </h1>
-    <p class="mt-3 text-lg leading-[1.7] text-zinc-400 [animation-delay:175ms] motion-safe:animate-fade-up">
-      Software engineer at Apple
-    </p>
-    <p class="mt-6 text-pretty text-zinc-300 [animation-delay:250ms] motion-safe:animate-fade-up">
-      I build software across the stack, from AI-powered internal tools at Apple to backend microservices at TikTok
-      serving millions of users. UCLA computer science alum, currently pursuing a master's at UIUC, with a passion for
-      building simple, reliable software—and optimizing everything from developer workflows to custom keyboards.
-    </p>
-    <ul
-      class="flex flex-wrap items-center gap-4 mt-8 [animation-delay:325ms] sm:gap-x-7 motion-safe:animate-fade-up"
-      role="list"
-    >
-      <li>
-        <a
-          class="inline-block px-5 py-2 font-semibold text-zinc-950 rounded bg-amber-300 transition sm:px-6 hover:-translate-y-0.5 hover:bg-amber-500 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-amber-300 active:translate-y-0"
-          href="/DanielDai-Resume.pdf">Résumé</a
-        >
-      </li>
-      <li>
-        <TextLink href="https://github.com/daidaniel">GitHub</TextLink>
-      </li>
-      <li>
-        <TextLink href="https://www.linkedin.com/in/daidaniel">LinkedIn</TextLink>
-      </li>
-      <li>
-        <TextLink href="mailto:danieldaiw@gmail.com">Email</TextLink>
-      </li>
-    </ul>
-  </div>
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path
+          d="M4 7.5 10 13.5 16 7.5"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"></path>
+      </svg>
+    </a>
+  </Section>
+  <Section id="more">
+    <h2 class="text-2xl font-semibold">more soon</h2>
+    <p class="mt-3 text-zinc-400">this spot is saved for a little experiment. check back in a bit.</p>
+  </Section>
 </Base>
