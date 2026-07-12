@@ -4,12 +4,18 @@ import Base from "../layouts/Base.astro";
 ---
 
 <Base title="Page not found — Daniel Dai" description="This page doesn't exist.">
-  <h1
-    class="text-[2rem] font-semibold leading-[1.1] tracking-[-0.02em] sm:text-[2.5rem] md:text-[3rem] motion-safe:animate-fade-up"
+  <!-- flex-1 (not Section's min-h-svh) so the content centers above the footer
+       within a single unscrolled viewport. -->
+  <div
+    class="flex flex-1 flex-col justify-center mx-auto w-full max-w-[40rem] px-6 py-[clamp(1.5rem,6svh,4rem)] md:max-w-2xl"
   >
-    Page not found
-  </h1>
-  <p class="mt-6 text-zinc-300 [animation-delay:100ms] motion-safe:animate-fade-up">
-    There's nothing here. <TextLink href="/">Head back home</TextLink>.
-  </p>
+    <h1
+      class="text-[2rem] font-semibold leading-[1.1] tracking-[-0.02em] sm:text-[2.5rem] md:text-[3rem] motion-safe:animate-fade-up"
+    >
+      Page not found
+    </h1>
+    <p class="mt-6 text-zinc-300 [animation-delay:100ms] motion-safe:animate-fade-up">
+      There's nothing here. <TextLink href="/">Head back home</TextLink>.
+    </p>
+  </div>
 </Base>

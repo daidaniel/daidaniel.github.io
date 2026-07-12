@@ -1,0 +1,15 @@
+---
+interface Props {
+  id?: string;
+}
+
+const { id } = Astro.props;
+---
+
+<!-- Full-viewport section: at least one window tall (grows if the window can't hold the
+     content), content centered. relative so children can pin to the section's edges. -->
+<section id={id} class="relative flex min-h-svh flex-col justify-center">
+  <div class="mx-auto w-full max-w-[40rem] px-6 py-[clamp(1.5rem,6svh,4rem)] md:max-w-2xl">
+    <slot />
+  </div>
+</section>
