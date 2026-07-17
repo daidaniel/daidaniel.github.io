@@ -15,6 +15,7 @@ const CONFIG = {
     radius: 0.012, // ×u
     orbitRadius: 0.18, // ×u — starting circular orbit radius
     period: 6, // s per starting orbit; sets GM, so binding strength too
+    softening: 2, // ×planet.radius — gravity softening; higher = gentler close flybys
   },
   escape: {
     // The gray ring is the loss line: the moon crossing ring.radius ends the
@@ -27,6 +28,7 @@ const CONFIG = {
     radius: [0.008, 0.02] as const, // ×u, spawn range
     speed: [0.12, 0.3] as const, // ×u/s at t=0 → t=rampTime
     interval: [2.5, 0.35] as const, // s between spawns at t=0 → t=rampTime
+    targeting: [0.2, 0.6] as const, // fraction of spawns aimed at the planet, t=0 → t=rampTime
     rampTime: 90, // s of survival until full difficulty
     max: 40, // live asteroid cap
   },
@@ -102,8 +104,8 @@ class GameScene extends Phaser.Scene {
 
   // Tutorial state (mode "tutorial" only).
   tutStep = 0;
+  tutStepAt = 0; // time.now when the current caption appeared (enforces min dwell)
   tutMoveT = 0;
-  tutPeaked = false;
   tutRespawning = false;
   tutCaption: Phaser.GameObjects.Text | null = null;
   tutSkip: Phaser.GameObjects.Text | null = null;
@@ -112,6 +114,15 @@ class GameScene extends Phaser.Scene {
   joyId: number | null = null;
   joyBase = new Phaser.Math.Vector2();
   joyVec = new Phaser.Math.Vector2(); // -1..1 thrust input from the joystick
+
+  restarting = false; // a fadeRestart is in flight
+
+  // Dev-only diagnostics (guarded by import.meta.env.DEV, tree-shaken in prod):
+  // per-frame ring buffer, moon-burst console dumps, backtick debug HUD.
+  debugLog: Record<string, number | string>[] = [];
+  debugHud: Phaser.GameObjects.Text | null = null;
+  lastMoonSpeed = 0;
+  lastBurstAt = 0;
 
   constructor() {
     super("main");
@@ -133,6 +144,7 @@ class GameScene extends Phaser.Scene {
     this.tutorialBtn = null;
     this.tutCaption = null;
     this.tutSkip = null;
+    this.restarting = false;
 
     this.makeTextures();
     this.deriveConstants();
@@ -169,7 +181,7 @@ class GameScene extends Phaser.Scene {
     this.mv.set(0, -Math.sqrt(this.GM / this.orbitR0));
     this.applySizes();
 
-    this.scoreText = this.add.text(0, 0, "0s", { fontFamily: MONO, color: "#fafafa" }).setOrigin(0.5, 0).setDepth(10);
+    this.scoreText = this.add.text(0, 0, "0", { fontFamily: MONO, color: "#fafafa" }).setOrigin(0.5, 0).setDepth(10);
     this.hintText = this.add
       .text(0, 0, "wasd / arrows — or drag — to move", { fontFamily: MONO, color: "#71717a" })
       .setOrigin(0.5, 1)
@@ -192,7 +204,7 @@ class GameScene extends Phaser.Scene {
         if (this.hitText(this.tutorialBtn, p)) return this.beginTutorial();
         this.beginRun(); // fall through: the same press seeds the joystick below
       } else if (this.mode === "tutorial" && this.hitText(this.tutSkip, p)) {
-        return this.scene.restart({ mode: "run" });
+        return this.fadeRestart();
       } else if (this.mode === "over") {
         return;
       }
@@ -218,6 +230,24 @@ class GameScene extends Phaser.Scene {
     const onResize = () => this.handleResize();
     this.scale.on("resize", onResize);
     this.events.once("shutdown", () => this.scale.off("resize", onResize));
+
+    if (this.mode === "run") this.cameras.main.fadeIn(400, 24, 24, 27);
+    if (import.meta.env.DEV) {
+      this.debugLog = [];
+      this.debugHud = null;
+      this.lastMoonSpeed = this.mv.length();
+      this.input.keyboard!.on("keydown-BACKTICK", () => this.toggleDebugHud());
+    }
+  }
+
+  // Fade to the background color, then restart straight into a run — used for
+  // every hard cut (tutorial end, skip, game-over restart). Menu -> play stays
+  // instant on purpose.
+  fadeRestart() {
+    if (this.restarting) return;
+    this.restarting = true;
+    this.cameras.main.fadeOut(300, 24, 24, 27);
+    this.cameras.main.once("camerafadeoutcomplete", () => this.scene.restart({ mode: "run" }));
   }
 
   hitText(t: Phaser.GameObjects.Text | null, p: Phaser.Input.Pointer): boolean {
@@ -278,9 +308,7 @@ class GameScene extends Phaser.Scene {
   beginTutorial() {
     this.destroyMenu();
     this.mode = "tutorial";
-    this.tutStep = 1;
     this.tutMoveT = 0;
-    this.tutPeaked = false;
     this.tutRespawning = false;
     this.tutCaption = this.add
       .text(0, 0, "", { fontFamily: MONO, color: "#fafafa", align: "center" })
@@ -293,7 +321,13 @@ class GameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .setDepth(20);
     this.layoutHud();
-    this.setCaption("move with wasd / arrows — or drag anywhere");
+    this.tutAdvance(1, "move with wasd / arrows — or drag anywhere");
+  }
+
+  tutAdvance(step: number, caption: string) {
+    this.tutStep = step;
+    this.tutStepAt = this.time.now;
+    this.setCaption(caption);
   }
 
   setCaption(text: string) {
@@ -302,22 +336,22 @@ class GameScene extends Phaser.Scene {
   }
 
   tutTick(dt: number, input: Phaser.Math.Vector2) {
+    if (this.time.now - this.tutStepAt < 1500) return; // every caption gets read before its gate can pass
     if (this.tutStep === 1) {
       if (input.length() > 0.2) this.tutMoveT += dt;
-      if (this.tutMoveT > 0.7) {
-        this.tutStep = 2;
-        this.setCaption(
-          "now burn hard in one direction —\nthe trail turns amber, then red, and a gray ring marks the limit:\nif your moon crosses it, the run ends. ease off to recover.",
-        );
-      }
+      if (this.tutMoveT > 0.7) this.tutAdvance(2, "now burn hard in one direction —\npush the trail to red.");
     } else if (this.tutStep === 2) {
-      if (this.danger > 0.6) this.tutPeaked = true;
-      if (this.tutPeaked && this.danger < 0.35) {
-        this.tutStep = 3;
-        this.setCaption("incoming asteroid — dodge it.\nif one touches you or your moon, the run ends.");
+      if (this.danger > 0.6)
+        this.tutAdvance(
+          3,
+          "good. ease off — let your moon settle.\nthe gray ring is the limit: cross it in a real run and it's gone.",
+        );
+    } else if (this.tutStep === 3) {
+      if (this.danger < 0.35) {
+        this.tutAdvance(4, "incoming asteroid — dodge it.\nif one touches you or your moon, the run ends.");
         this.tutSpawnAsteroid();
       }
-    } else if (this.tutStep === 3) {
+    } else if (this.tutStep === 4) {
       // Dodged = the rock is clearly past and receding (culling takes too long).
       const a = this.asteroids[0];
       const dodged =
@@ -325,16 +359,25 @@ class GameScene extends Phaser.Scene {
         Math.hypot(a.img.x - this.planet.x, a.img.y - this.planet.y) > 0.3 * this.u &&
         (this.planet.x - a.img.x) * a.vx + (this.planet.y - a.img.y) * a.vy < 0;
       if ((this.asteroids.length === 0 || dodged) && !this.tutRespawning) {
-        this.tutStep = 4;
-        this.setCaption("you're ready.");
-        this.time.delayedCall(1100, () => this.scene.restart({ mode: "run" }));
+        this.tutAdvance(5, "you're ready.");
+        this.time.delayedCall(1100, () => this.fadeRestart());
       }
     }
   }
 
   tutSpawnAsteroid() {
-    // One rock at 1.5x the base speed (still gentle), aimed straight at the planet.
-    this.spawnAsteroid(CONFIG.asteroids.speed[0] * 1.5 * this.u, { x: this.planet.x, y: this.planet.y });
+    // From 0.55u out toward the nearest screen edge, aimed at the planet, at
+    // 1.5x the base speed — same gentle arrival (~3 s) every run.
+    const { width: w, height: h } = this.scale;
+    const { x: px, y: py } = this.planet;
+    const d = Math.min(px, w - px, py, h - py);
+    const dir =
+      d === px ? { x: -1, y: 0 } : d === w - px ? { x: 1, y: 0 } : d === py ? { x: 0, y: -1 } : { x: 0, y: 1 };
+    this.spawnAsteroid(
+      CONFIG.asteroids.speed[0] * 1.5 * this.u,
+      { x: px, y: py },
+      { x: px + dir.x * 0.55 * this.u, y: py + dir.y * 0.55 * this.u },
+    );
   }
 
   tutHit(a: Asteroid, index: number) {
@@ -406,14 +449,22 @@ class GameScene extends Phaser.Scene {
   handleResize() {
     const { width: w, height: h } = this.scale;
     if (w === 0 || h === 0) return;
-    // ponytail: mid-run resizes (mobile URL bar) re-derive GM etc.; the orbit's
-    // energy readout shifts slightly and the trail color re-settles. Accepted.
-    const scaleAsteroids = this.u;
+    const uOld = this.u;
     this.deriveConstants();
+    const s = this.u / uOld;
+    // Lengths are ×u and speeds ×u/s, so rescaling the moon's offset and both
+    // velocities keeps r/orbitR0 and E/E0 unchanged — a resize (mobile URL
+    // bar) is no longer a physics discontinuity.
+    this.pv.scale(s);
+    this.mv.scale(s);
+    this.moon.setPosition(
+      this.planet.x + (this.moon.x - this.planet.x) * s,
+      this.planet.y + (this.moon.y - this.planet.y) * s,
+    );
     for (const a of this.asteroids) {
-      a.r *= this.u / scaleAsteroids;
-      a.vx *= this.u / scaleAsteroids;
-      a.vy *= this.u / scaleAsteroids;
+      a.r *= s;
+      a.vx *= s;
+      a.vy *= s;
     }
     this.applySizes();
     this.layoutHud();
@@ -444,7 +495,7 @@ class GameScene extends Phaser.Scene {
     const playerControlled = this.mode === "run" || this.mode === "tutorial";
     if (this.mode === "run") {
       this.elapsed += dt;
-      this.scoreText.setText(`${Math.floor(this.elapsed)}s`);
+      this.scoreText.setText(`${Math.floor(this.elapsed)}`);
     }
 
     const { width: w, height: h } = this.scale;
@@ -476,8 +527,9 @@ class GameScene extends Phaser.Scene {
     }
 
     // --- Moon: inverse-square gravity, semi-implicit Euler (v before p), substepped.
-    const eps2 = this.planetR ** 2; // softening so a dragged-in moon can't blow up numerically
-    const steps = 2;
+    // Softening caps close-pass acceleration (no slingshot flings, no numeric blow-up).
+    const eps2 = (CONFIG.moon.softening * this.planetR) ** 2;
+    const steps = 4;
     const hdt = dt / steps;
     for (let i = 0; i < steps; i++) {
       const dx = this.moon.x - this.planet.x;
@@ -516,8 +568,10 @@ class GameScene extends Phaser.Scene {
       // reels the moon back in, and floors low enough (0.25) that step 2's
       // "recover below 0.35 danger" completes on its own once you ease off.
       if (target > 0.25) assist = 1.2 * CONFIG.escape.assistStrength * ((target - 0.25) / 0.75);
-    } else if (target > zoneLo && target < zoneHi) {
-      assist = CONFIG.escape.assistStrength * Math.sin(Math.PI * ((target - zoneLo) / (zoneHi - zoneLo)));
+    } else if (energyDanger > zoneLo && energyDanger < zoneHi) {
+      // Keyed to energy only: a moon being dragged out at matched velocity has
+      // low energy danger, so nothing fights the drift toward the loss ring.
+      assist = CONFIG.escape.assistStrength * Math.sin(Math.PI * ((energyDanger - zoneLo) / (zoneHi - zoneLo)));
     }
     if (assist > 0) {
       const f = 1 - Math.exp(-assist * dt);
@@ -557,7 +611,14 @@ class GameScene extends Phaser.Scene {
       this.spawnT -= dt;
       if (this.spawnT <= 0 && this.asteroids.length < ast.max) {
         this.spawnT = lerp(ast.interval[0], ast.interval[1], ramp);
-        this.spawnAsteroid(lerp(ast.speed[0], ast.speed[1], ramp) * this.u * lerp(0.75, 1.25, Math.random()));
+        // Anti-camping: a ramping fraction of rocks aims at the planet itself,
+        // jittered so it reads as bad luck rather than homing.
+        const jitter = () => (Math.random() - 0.5) * 0.12 * this.u;
+        const aim =
+          Math.random() < lerp(ast.targeting[0], ast.targeting[1], ramp)
+            ? { x: this.planet.x + jitter(), y: this.planet.y + jitter() }
+            : undefined;
+        this.spawnAsteroid(lerp(ast.speed[0], ast.speed[1], ramp) * this.u * lerp(0.75, 1.25, Math.random()), aim);
       }
     }
     const cull = 0.12 * this.u;
@@ -566,7 +627,12 @@ class GameScene extends Phaser.Scene {
       a.img.x += a.vx * dt;
       a.img.y += a.vy * dt;
       a.img.rotation += dt * 0.6;
-      if (a.img.x < -cull || a.img.x > w + cull || a.img.y < -cull || a.img.y > h + cull) {
+      // No culling in tutorial: its one scripted rock may legally spawn beyond
+      // the margin (0.55u out), and the dodge gate — not the cull — retires it.
+      if (
+        this.mode !== "tutorial" &&
+        (a.img.x < -cull || a.img.x > w + cull || a.img.y < -cull || a.img.y > h + cull)
+      ) {
         a.img.destroy();
         this.asteroids.splice(i, 1);
         continue;
@@ -595,18 +661,61 @@ class GameScene extends Phaser.Scene {
         .fillStyle(WHITE, 0.5)
         .fillCircle(this.joyBase.x + this.joyVec.x * jr, this.joyBase.y + this.joyVec.y * jr, jr * 0.35);
     }
+
+    if (import.meta.env.DEV) this.debugTick(dt, r, Math.sqrt(relV2), E, assist);
   }
 
-  spawnAsteroid(speed: number, aim?: { x: number; y: number }) {
+  // Dev-only: record the frame, dump the buffer on a moon-speed jump, feed the HUD.
+  debugTick(dt: number, r: number, relV: number, E: number, assist: number) {
+    const moonSpeed = this.mv.length();
+    const row = {
+      t: +(this.time.now / 1000).toFixed(2),
+      dt: +dt.toFixed(3),
+      mode: this.mode,
+      rOverR0: +(r / this.orbitR0).toFixed(2),
+      moonSpeed: +(moonSpeed / this.u).toFixed(3), // ×u/s
+      relSpeed: +(relV / this.u).toFixed(3), // ×u/s
+      EOverAbsE0: +(E / Math.abs(this.E0)).toFixed(2),
+      danger: +this.danger.toFixed(2),
+      assist: +assist.toFixed(2),
+    };
+    this.debugLog.push(row);
+    if (this.debugLog.length > 90) this.debugLog.shift();
+    const jump = Math.abs(moonSpeed - this.lastMoonSpeed) / this.u;
+    if (jump > 0.15 && this.time.now - this.lastBurstAt > 1000) {
+      this.lastBurstAt = this.time.now;
+      console.warn(`[orbit] moon burst: |mv| jumped ${jump.toFixed(3)}u in one frame`, [...this.debugLog]);
+    }
+    this.lastMoonSpeed = moonSpeed;
+    this.debugHud?.setText(
+      `r/r0 ${row.rOverR0}  relV ${row.relSpeed}u/s  E/|E0| ${row.EOverAbsE0}\n` +
+        `danger ${row.danger}  assist ${row.assist}  dt ${row.dt}  ${this.mode}`,
+    );
+  }
+
+  toggleDebugHud() {
+    if (this.debugHud) {
+      this.debugHud.destroy();
+      this.debugHud = null;
+      return;
+    }
+    this.debugHud = this.add
+      .text(12, Math.max(48, this.u * 0.08), "", { fontFamily: MONO, fontSize: 12, color: "#a1a1aa" })
+      .setDepth(30);
+  }
+
+  spawnAsteroid(speed: number, aim?: { x: number; y: number }, from?: { x: number; y: number }) {
     const { width: w, height: h } = this.scale;
     const r = this.u * lerp(CONFIG.asteroids.radius[0], CONFIG.asteroids.radius[1], Math.random());
     const pad = r + 2;
-    const [x, y] = [
-      [Math.random() * w, -pad],
-      [Math.random() * w, h + pad],
-      [-pad, Math.random() * h],
-      [w + pad, Math.random() * h],
-    ][Phaser.Math.Between(0, 3)];
+    const [x, y] = from
+      ? [from.x, from.y]
+      : [
+          [Math.random() * w, -pad],
+          [Math.random() * w, h + pad],
+          [-pad, Math.random() * h],
+          [w + pad, Math.random() * h],
+        ][Phaser.Math.Between(0, 3)];
     // Default aim: a random point in the central 60% of the screen — inward bias.
     const t = new Phaser.Math.Vector2(
       aim?.x ?? w * lerp(0.2, 0.8, Math.random()),
@@ -615,7 +724,7 @@ class GameScene extends Phaser.Scene {
     const dir = t.subtract({ x, y }).normalize();
     const img = this.add
       .image(x, y, "rock")
-      .setTint(0xa1a1aa)
+      .setTint(0x52525b) // zinc-600: hazards sit darker than the white moon
       .setDepth(3)
       .setRotation(Math.random() * Math.PI * 2);
     img.setDisplaySize(r * 2, r * 2);
@@ -669,7 +778,7 @@ class GameScene extends Phaser.Scene {
     // Small delay so a death-frame tap doesn't skip the score screen.
     // Restart drops straight back into a run — the menu only shows on page load.
     this.time.delayedCall(400, () => {
-      const restart = () => this.scene.restart({ mode: "run" });
+      const restart = () => this.fadeRestart();
       this.input.once("pointerdown", restart);
       for (const e of ["keydown-R", "keydown-SPACE", "keydown-ENTER"]) this.input.keyboard!.once(e, restart);
     });
