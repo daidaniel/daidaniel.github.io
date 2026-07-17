@@ -108,10 +108,7 @@ class GameScene extends Phaser.Scene {
   tutCaption: Phaser.GameObjects.Text | null = null;
   tutSkip: Phaser.GameObjects.Text | null = null;
 
-  keys!: Record<
-    "W" | "A" | "S" | "D" | "UP" | "LEFT" | "DOWN" | "RIGHT" | "R" | "SPACE" | "ENTER",
-    Phaser.Input.Keyboard.Key
-  >;
+  keys!: Record<string, Phaser.Input.Keyboard.Key>;
   joyId: number | null = null;
   joyBase = new Phaser.Math.Vector2();
   joyVec = new Phaser.Math.Vector2(); // -1..1 thrust input from the joystick
@@ -540,9 +537,7 @@ class GameScene extends Phaser.Scene {
     }
     this.trailGfx.clear();
     // --- Limit ring (escape telegraph #2): fades in as the moon strays far.
-    const ringTarget = playerControlled
-      ? clamp01((r / this.orbitR0 - ring.fadeStart) / (ring.fadeEnd - ring.fadeStart))
-      : 0;
+    const ringTarget = clamp01((r / this.orbitR0 - ring.fadeStart) / (ring.fadeEnd - ring.fadeStart));
     this.ringA += (ringTarget - this.ringA) * Math.min(1, dt * 8);
     if (this.ringA > 0.02) {
       this.trailGfx.lineStyle(Math.max(1.5, this.moonR * 0.15), GRAY, 0.35 * this.ringA);
@@ -605,14 +600,13 @@ class GameScene extends Phaser.Scene {
   spawnAsteroid(speed: number, aim?: { x: number; y: number }) {
     const { width: w, height: h } = this.scale;
     const r = this.u * lerp(CONFIG.asteroids.radius[0], CONFIG.asteroids.radius[1], Math.random());
-    const edge = Phaser.Math.Between(0, 3);
     const pad = r + 2;
-    let x = 0;
-    let y = 0;
-    if (edge === 0) [x, y] = [Math.random() * w, -pad];
-    else if (edge === 1) [x, y] = [Math.random() * w, h + pad];
-    else if (edge === 2) [x, y] = [-pad, Math.random() * h];
-    else [x, y] = [w + pad, Math.random() * h];
+    const [x, y] = [
+      [Math.random() * w, -pad],
+      [Math.random() * w, h + pad],
+      [-pad, Math.random() * h],
+      [w + pad, Math.random() * h],
+    ][Phaser.Math.Between(0, 3)];
     // Default aim: a random point in the central 60% of the screen — inward bias.
     const t = new Phaser.Math.Vector2(
       aim?.x ?? w * lerp(0.2, 0.8, Math.random()),
@@ -677,9 +671,7 @@ class GameScene extends Phaser.Scene {
     this.time.delayedCall(400, () => {
       const restart = () => this.scene.restart({ mode: "run" });
       this.input.once("pointerdown", restart);
-      this.input.keyboard!.once("keydown-R", restart);
-      this.input.keyboard!.once("keydown-SPACE", restart);
-      this.input.keyboard!.once("keydown-ENTER", restart);
+      for (const e of ["keydown-R", "keydown-SPACE", "keydown-ENTER"]) this.input.keyboard!.once(e, restart);
     });
   }
 }
