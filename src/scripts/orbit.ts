@@ -418,7 +418,7 @@ class GameScene extends Phaser.Scene {
     const s = this.tutSteps[this.tutStep - 1];
     if (s.time) {
       if (inStep > s.time) this.tutEnter(this.tutStep + 1);
-    } else if (s.done && inStep > 1500 && s.done(dt, input) && this.tutStep < this.tutSteps.length) {
+    } else if (s.done && inStep > 1500 && s.done(dt, input)) {
       this.tutEnter(this.tutStep + 1);
     }
   }
@@ -426,9 +426,8 @@ class GameScene extends Phaser.Scene {
   setMoonActive(on: boolean) {
     this.moonActive = on;
     this.moon.setVisible(on);
-    this.trail.length = 0;
     this.trailGfx.clear();
-    if (on) this.resetMoon();
+    if (on) this.resetMoon(); // clears the trail array; while off, nothing reads it
   }
 
   // Fresh circular orbit around the planet's current position and velocity,
@@ -726,7 +725,7 @@ class GameScene extends Phaser.Scene {
     this.pvSmooth.y += (this.pv.y - this.pvSmooth.y) * Math.min(1, dt * 2);
     const relV2 = (this.mv.x - this.pvSmooth.x) ** 2 + (this.mv.y - this.pvSmooth.y) ** 2;
     const E = relV2 / 2 - this.GM / ((n - 1) * Math.pow(r, n - 1));
-    const energyDanger = clamp01((clamp01(1 - E / this.E0) - 0.08) / 0.92); // E0 (bound) -> 0, E=0 (escape energy) -> 1
+    const energyDanger = clamp01((1 - E / this.E0 - 0.08) / 0.92); // E0 (bound) -> 0, E=0 (escape energy) -> 1
     const distDanger = clamp01((r / this.orbitR0 - ring.fadeStart) / (ring.radius - ring.fadeStart));
     const target = Math.max(energyDanger, distDanger);
     this.danger += (target - this.danger) * Math.min(1, dt * 10);
