@@ -318,7 +318,7 @@ class GameScene extends Phaser.Scene {
     const { width: w, height: h } = this.scale;
     this.starField?.destroy();
     if (this.textures.exists("stars")) this.textures.remove("stars");
-    const ct = this.textures.createCanvas("stars", Math.max(1, w), Math.max(1, h))!;
+    const ct = this.textures.createCanvas("stars", w, h)!;
     const ctx = ct.getContext();
     const n = Math.round((w * h) / 15000);
     for (let i = 0; i < n; i++) {
@@ -550,8 +550,8 @@ class GameScene extends Phaser.Scene {
     g.fillPoints(pts, true);
     g.generateTexture("rock", 128, 128);
     g.destroy();
-    // Planet: amber disc with a darker crescent — a lit circle offset in a
-    // random direction per load over a shadow-toned base, clipped to the disc.
+    // Planet: a lit amber circle offset top-left over a shadow-toned base,
+    // clipped to the disc — crescent shadow on the bottom-right edge.
     const ct = this.textures.createCanvas("planet", 128, 128)!;
     const ctx = ct.getContext();
     ctx.fillStyle = "#f59e0b"; // amber-500 shadow tone
@@ -559,8 +559,6 @@ class GameScene extends Phaser.Scene {
     ctx.arc(64, 64, 64, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalCompositeOperation = "source-atop";
-    // Lit from the top-left (the flat-vector convention): shadow crescent
-    // falls on the bottom-right edge.
     ctx.fillStyle = "#fcd34d"; // AMBER lit side
     ctx.beginPath();
     ctx.arc(64 - 13, 64 - 13, 64, 0, Math.PI * 2);
