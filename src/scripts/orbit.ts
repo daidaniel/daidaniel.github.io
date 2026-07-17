@@ -95,8 +95,7 @@ class GameScene extends Phaser.Scene {
 
   trailGfx!: Phaser.GameObjects.Graphics;
   joyGfx!: Phaser.GameObjects.Graphics;
-  glow!: Phaser.GameObjects.Image; // engine glow on the planet's trailing edge
-  exhaustT = 0; // throttles wisp emission to ~30/s
+  exhaustT = 0; // throttles puff emission to ~20/s
   exhaust!: Phaser.GameObjects.Particles.ParticleEmitter;
   boom!: Phaser.GameObjects.Particles.ParticleEmitter;
   scoreText!: Phaser.GameObjects.Text;
@@ -107,7 +106,7 @@ class GameScene extends Phaser.Scene {
   menuTween: Phaser.Tweens.Tween | null = null; // the prompt pulse — killed on menu exit
   tutorialBtn: Phaser.GameObjects.Text | null = null;
 
-  stars: Phaser.GameObjects.Image[] = []; // twinkling backdrop, depth 0
+  starField: Phaser.GameObjects.Image | null = null; // static backdrop baked into one texture, depth 0
 
   // Tutorial state (mode "tutorial" only).
   tutStep = 0; // 1-based index into tutSteps
@@ -159,7 +158,7 @@ class GameScene extends Phaser.Scene {
     this.tutInterrupted = 0;
     this.restarting = false;
     this.moonActive = true; // the fresh moon image below is visible by default
-    this.stars = []; // previous scene's display objects died at shutdown
+    this.starField = null; // the previous scene's image died at shutdown
 
     this.makeTextures();
     this.deriveConstants();
@@ -168,15 +167,14 @@ class GameScene extends Phaser.Scene {
     this.buildStars();
     this.trailGfx = this.add.graphics().setDepth(1);
     this.exhaust = this.add.particles(0, 0, "disc", {
-      lifespan: 250,
-      speed: { min: this.u * 0.03, max: this.u * 0.08 },
-      scale: { start: this.planetR / 64 / 4.4, end: 0 },
-      alpha: { start: 0.35, end: 0 },
+      lifespan: 400,
+      speed: { min: this.u * 0.02, max: this.u * 0.05 },
+      scale: { start: this.planetR / 64 / 1.75, end: 0 },
+      alpha: { start: 0.12, end: 0 },
       tint: AMBER,
       emitting: false,
     });
     this.exhaust.setDepth(2);
-    this.glow = this.add.image(0, 0, "glow").setTint(AMBER).setAlpha(0).setDepth(2);
     this.planet = this.add.image(w / 2, h / 2, "planet").setDepth(3);
     this.moon = this.add.image(0, 0, "disc").setTint(WHITE).setDepth(4);
     this.boom = this.add.particles(0, 0, "disc", {
@@ -314,38 +312,23 @@ class GameScene extends Phaser.Scene {
     this.tutorialBtn = null;
   }
 
+  // Static field baked into one viewport-sized texture: a single draw call,
+  // random per load. Rebuilt on resize.
   buildStars() {
-    for (const s of this.stars) {
-      this.tweens.killTweensOf(s);
-      s.destroy();
-    }
-    this.stars = [];
     const { width: w, height: h } = this.scale;
+    this.starField?.destroy();
+    if (this.textures.exists("stars")) this.textures.remove("stars");
+    const ct = this.textures.createCanvas("stars", Math.max(1, w), Math.max(1, h))!;
+    const ctx = ct.getContext();
     const n = Math.round((w * h) / 15000);
     for (let i = 0; i < n; i++) {
       const d = lerp(1, 3, Math.random());
-      const base = lerp(0.4, 0.8, Math.random());
-      const star = this.add
-        .image(Math.random() * w, Math.random() * h, "disc")
-        .setDisplaySize(d, d)
-        .setTint(Math.random() < 0.25 ? WHITE : 0xd4d4d8)
-        .setAlpha(base)
-        .setDepth(0);
-      if (!REDUCED_MOTION) {
-        // Dim to 60% of base, never out — a full blackout reads as objects
-        // blinking into existence, not as stars.
-        this.tweens.add({
-          targets: star,
-          alpha: base * 0.6,
-          duration: lerp(2000, 6000, Math.random()),
-          delay: Math.random() * 4000,
-          yoyo: true,
-          repeat: -1,
-          ease: "Sine.InOut",
-        });
-      }
-      this.stars.push(star);
+      ctx.globalAlpha = lerp(0.4, 0.8, Math.random());
+      ctx.fillStyle = Math.random() < 0.25 ? "#fafafa" : "#d4d4d8";
+      ctx.fillRect(Math.random() * (w - 3), Math.random() * (h - 3), d, d);
     }
+    ct.refresh();
+    this.starField = this.add.image(0, 0, "stars").setOrigin(0).setDepth(0);
   }
 
   // Menu -> run happens in place (no restart): the idle sim is already a valid
@@ -567,35 +550,21 @@ class GameScene extends Phaser.Scene {
     g.fillPoints(pts, true);
     g.generateTexture("rock", 128, 128);
     g.destroy();
-    // Planet: amber disc with wavy darker latitude bands, clipped to the disc
-    // by the canvas composite mode. Waviness is random per load.
+    // Planet: amber disc with a darker crescent — a lit circle offset in a
+    // random direction per load over a shadow-toned base, clipped to the disc.
     const ct = this.textures.createCanvas("planet", 128, 128)!;
     const ctx = ct.getContext();
-    ctx.fillStyle = "#fcd34d"; // AMBER
+    ctx.fillStyle = "#f59e0b"; // amber-500 shadow tone
     ctx.beginPath();
     ctx.arc(64, 64, 64, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalCompositeOperation = "source-atop";
-    ctx.strokeStyle = "#f59e0b"; // amber-500
-    const wave = () => (Math.random() - 0.5) * 12;
-    for (const y of [38, 64, 92]) {
-      ctx.lineWidth = lerp(10, 18, Math.random());
-      ctx.beginPath();
-      ctx.moveTo(-8, y + wave());
-      ctx.quadraticCurveTo(43, y + wave(), 74, y + wave());
-      ctx.quadraticCurveTo(105, y + wave(), 136, y + wave());
-      ctx.stroke();
-    }
+    const lightAngle = Math.random() * Math.PI * 2;
+    ctx.fillStyle = "#fcd34d"; // AMBER lit side
+    ctx.beginPath();
+    ctx.arc(64 + Math.cos(lightAngle) * 18, 64 + Math.sin(lightAngle) * 18, 64, 0, Math.PI * 2);
+    ctx.fill();
     ct.refresh();
-    // Soft radial falloff for the engine glow.
-    const gt = this.textures.createCanvas("glow", 64, 64)!;
-    const gctx = gt.getContext();
-    const grad = gctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    grad.addColorStop(0, "rgba(255,255,255,1)");
-    grad.addColorStop(1, "rgba(255,255,255,0)");
-    gctx.fillStyle = grad;
-    gctx.fillRect(0, 0, 64, 64);
-    gt.refresh();
   }
 
   deriveConstants() {
@@ -621,7 +590,6 @@ class GameScene extends Phaser.Scene {
 
   applySizes() {
     this.planet.setDisplaySize(this.planetR * 2, this.planetR * 2);
-    this.glow.setDisplaySize(this.planetR * 1.8, this.planetR * 1.8);
     this.moon.setDisplaySize(this.moonR * 2, this.moonR * 2);
     for (const a of this.asteroids) a.img.setDisplaySize(a.r * 2, a.r * 2);
   }
@@ -714,18 +682,21 @@ class GameScene extends Phaser.Scene {
       if (Math.abs(this.pv.y) > this.u * 0.1) this.squash(false);
       this.pv.y = 0;
     }
-    // Thrust visuals: soft glow on the trailing edge + throttled amber wisps.
+    // Thrust trail: wide, faint amber puffs behind the planet — spawn points
+    // jittered perpendicular to the thrust so the trail reads broad.
     if (input.length() > 0.1) {
-      const n = input.clone().normalize();
-      this.glow.setPosition(this.planet.x - n.x * this.planetR, this.planet.y - n.y * this.planetR);
       this.exhaustT += dt;
-      if (this.exhaustT > 0.033) {
+      if (this.exhaustT > 0.05) {
         this.exhaustT = 0;
-        this.exhaust.emitParticleAt(this.glow.x, this.glow.y, 1);
+        const n = input.clone().normalize();
+        const j = (Math.random() - 0.5) * 0.8 * this.planetR;
+        this.exhaust.emitParticleAt(
+          this.planet.x - n.x * this.planetR - n.y * j,
+          this.planet.y - n.y * this.planetR + n.x * j,
+          1,
+        );
       }
     }
-    const glowTarget = input.length() > 0.1 ? 0.35 : 0;
-    this.glow.alpha += (glowTarget - this.glow.alpha) * Math.min(1, dt * 10);
 
     // Moon physics + telegraphs + loss live in moonTick; it can end the run.
     if (this.moonActive) this.moonTick(dt);
@@ -1007,6 +978,10 @@ document.fonts.ready.then(() => {
     type: Phaser.AUTO,
     parent: "game",
     backgroundColor: BG,
+    // Raw deltas: Phaser's smoothing caps delta near the 60fps target, which
+    // runs the whole sim at half speed on a 30fps display/session. update()
+    // already clamps dt at 50ms for spikes.
+    fps: { smoothStep: false },
     scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
     scene: GameScene,
   });
