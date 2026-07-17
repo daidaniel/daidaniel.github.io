@@ -95,9 +95,9 @@ class GameScene extends Phaser.Scene {
 
   trailGfx!: Phaser.GameObjects.Graphics;
   joyGfx!: Phaser.GameObjects.Graphics;
-  exhaustT = 0; // throttles puff emission to ~20/s
-  exhaust!: Phaser.GameObjects.Particles.ParticleEmitter;
   boom!: Phaser.GameObjects.Particles.ParticleEmitter;
+  pTrail: { x: number; y: number }[] = []; // planet motion trail (moon-style)
+  pTrailT = 0;
   scoreText!: Phaser.GameObjects.Text;
   hintText!: Phaser.GameObjects.Text;
 
@@ -105,8 +105,6 @@ class GameScene extends Phaser.Scene {
   menuUi: Phaser.GameObjects.Container | null = null;
   menuTween: Phaser.Tweens.Tween | null = null; // the prompt pulse — killed on menu exit
   tutorialBtn: Phaser.GameObjects.Text | null = null;
-
-  starField: Phaser.GameObjects.Image | null = null; // static backdrop baked into one texture, depth 0
 
   // Tutorial state (mode "tutorial" only).
   tutStep = 0; // 1-based index into tutSteps
@@ -143,7 +141,8 @@ class GameScene extends Phaser.Scene {
     this.ringA = 0;
     this.spawnT = CONFIG.asteroids.interval[0]; // opening grace: no rock in the first seconds
     this.trailT = 0;
-    this.exhaustT = 0;
+    this.pTrail = [];
+    this.pTrailT = 0;
     this.asteroids = [];
     this.trail = [];
     this.joyId = null;
@@ -158,23 +157,11 @@ class GameScene extends Phaser.Scene {
     this.tutInterrupted = 0;
     this.restarting = false;
     this.moonActive = true; // the fresh moon image below is visible by default
-    this.starField = null; // the previous scene's image died at shutdown
-
     this.makeTextures();
     this.deriveConstants();
     const { width: w, height: h } = this.scale;
 
-    this.buildStars();
     this.trailGfx = this.add.graphics().setDepth(1);
-    this.exhaust = this.add.particles(0, 0, "disc", {
-      lifespan: 400,
-      speed: { min: this.u * 0.02, max: this.u * 0.05 },
-      scale: { start: this.planetR / 64 / 1.75, end: 0 },
-      alpha: { start: 0.12, end: 0 },
-      tint: AMBER,
-      emitting: false,
-    });
-    this.exhaust.setDepth(2);
     this.planet = this.add.image(w / 2, h / 2, "planet").setDepth(3);
     this.moon = this.add.image(0, 0, "disc").setTint(WHITE).setDepth(4);
     this.boom = this.add.particles(0, 0, "disc", {
@@ -310,25 +297,6 @@ class GameScene extends Phaser.Scene {
     this.menuUi.destroy(true);
     this.menuUi = null;
     this.tutorialBtn = null;
-  }
-
-  // Static field baked into one viewport-sized texture: a single draw call,
-  // random per load. Rebuilt on resize.
-  buildStars() {
-    const { width: w, height: h } = this.scale;
-    this.starField?.destroy();
-    if (this.textures.exists("stars")) this.textures.remove("stars");
-    const ct = this.textures.createCanvas("stars", Math.max(1, w), Math.max(1, h))!;
-    const ctx = ct.getContext();
-    const n = Math.round((w * h) / 15000);
-    for (let i = 0; i < n; i++) {
-      const d = lerp(1, 3, Math.random());
-      ctx.globalAlpha = lerp(0.4, 0.8, Math.random());
-      ctx.fillStyle = Math.random() < 0.25 ? "#fafafa" : "#d4d4d8";
-      ctx.fillRect(Math.random() * (w - 3), Math.random() * (h - 3), d, d);
-    }
-    ct.refresh();
-    this.starField = this.add.image(0, 0, "stars").setOrigin(0).setDepth(0);
   }
 
   // Menu -> run happens in place (no restart): the idle sim is already a valid
@@ -559,10 +527,11 @@ class GameScene extends Phaser.Scene {
     ctx.arc(64, 64, 64, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalCompositeOperation = "source-atop";
-    const lightAngle = Math.random() * Math.PI * 2;
+    // Lit from the top-left (the flat-vector convention): shadow crescent
+    // falls on the bottom-right edge.
     ctx.fillStyle = "#fcd34d"; // AMBER lit side
     ctx.beginPath();
-    ctx.arc(64 + Math.cos(lightAngle) * 18, 64 + Math.sin(lightAngle) * 18, 64, 0, Math.PI * 2);
+    ctx.arc(64 - 13, 64 - 13, 64, 0, Math.PI * 2);
     ctx.fill();
     ct.refresh();
   }
@@ -628,7 +597,6 @@ class GameScene extends Phaser.Scene {
     }
     this.applySizes();
     this.layoutHud();
-    this.buildStars(); // re-cover the new area
     if (this.mode === "menu") {
       this.destroyMenu();
       this.buildMenu();
@@ -682,20 +650,22 @@ class GameScene extends Phaser.Scene {
       if (Math.abs(this.pv.y) > this.u * 0.1) this.squash(false);
       this.pv.y = 0;
     }
-    // Thrust trail: wide, faint amber puffs behind the planet — spawn points
-    // jittered perpendicular to the thrust so the trail reads broad.
-    if (input.length() > 0.1) {
-      this.exhaustT += dt;
-      if (this.exhaustT > 0.05) {
-        this.exhaustT = 0;
-        const n = input.clone().normalize();
-        const j = (Math.random() - 0.5) * 0.8 * this.planetR;
-        this.exhaust.emitParticleAt(
-          this.planet.x - n.x * this.planetR - n.y * j,
-          this.planet.y - n.y * this.planetR + n.x * j,
-          1,
-        );
+    // Planet motion trail, moon-style: sample while moving, retract the tail
+    // when stopped so it never lingers.
+    this.pTrailT += dt;
+    if (this.pTrailT > 0.025) {
+      this.pTrailT = 0;
+      if (this.pv.length() > 0.02 * this.u) {
+        this.pTrail.push({ x: this.planet.x, y: this.planet.y });
+        if (this.pTrail.length > 40) this.pTrail.shift();
+      } else {
+        this.pTrail.shift();
       }
+    }
+    this.trailGfx.clear(); // both trails + the ring redraw below every frame
+    for (let i = 1; i < this.pTrail.length; i++) {
+      this.trailGfx.lineStyle(this.planetR * 0.5 * (i / this.pTrail.length), AMBER, 0.3 * (i / this.pTrail.length));
+      this.trailGfx.lineBetween(this.pTrail[i - 1].x, this.pTrail[i - 1].y, this.pTrail[i].x, this.pTrail[i].y);
     }
 
     // Moon physics + telegraphs + loss live in moonTick; it can end the run.
@@ -832,7 +802,6 @@ class GameScene extends Phaser.Scene {
       this.trail.push({ x: this.moon.x, y: this.moon.y });
       if (this.trail.length > 40) this.trail.shift();
     }
-    this.trailGfx.clear();
     // Limit ring (telegraph #2): fades in as the moon strays far.
     const ringTarget = clamp01((r / this.orbitR0 - ring.fadeStart) / (ring.fadeEnd - ring.fadeStart));
     this.ringA += (ringTarget - this.ringA) * Math.min(1, dt * 8);
