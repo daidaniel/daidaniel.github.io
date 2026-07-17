@@ -29,7 +29,9 @@ Manage the background server with `astro dev stop`, `astro dev status`, and `ast
 
 ## Documentation
 
-Full documentation: https://docs.astro.build
+Orbit game — how to play, mechanics, physics, `CONFIG` tuning, verification: `docs/orbit.md`.
+
+Astro documentation: https://docs.astro.build
 
 Consult these guides before working on related tasks:
 

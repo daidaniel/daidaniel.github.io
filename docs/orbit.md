@@ -1,8 +1,10 @@
 # orbit
 
-Endless-survival browser game at `/orbit`: thrust a planet around, keep its moon in orbit, dodge asteroids. Score = seconds survived, shown as a bare count. One Phaser 3.90 scene; the only page on the site that ships client-side JavaScript.
+Endless-survival browser game at `/orbit`: thrust a planet around, keep its moon in orbit, dodge asteroids. Score = seconds survived (the HUD shows the bare integer). One Phaser 3.90 scene; the only page on the site that ships client-side JavaScript.
 
 Files: `src/pages/orbit.astro` (page shell), `src/scripts/orbit.ts` (all game code).
+
+Units: lengths are ×u, speeds ×u/s, accelerations ×u/s², where `u = min(viewport width, height)` in px — one feel across phone and desktop.
 
 ## How to play
 
@@ -23,31 +25,31 @@ A run ends three ways:
 
 **Danger telegraph.** One 0–1 value, `danger`, colors the moon and its trail zinc → amber (0.5) → red (1.0). It is the maximum of two signals:
 
-- _energy danger_ — specific orbital energy `E = |v_moon − v̄_planet|²/2 − GM/((n−1)·r^(n−1))`, normalized from the starting circular orbit (`0`) to escape energy (`1`). Rises with hard burns before the moon visibly strays: the leading indicator. `v̄_planet` is the planet's velocity smoothed over ~0.5 s, and a 0.08 deadband clamps small values to 0 — raw `pv` jumps the instant the player thrusts, which used to flash the moon amber on every tap (measured: a 200 ms tap spiked danger to 0.14 with the moon at 1.28× orbit radius; after the fix, 0).
+- _energy danger_ — specific orbital energy `E = |v_moon − v̄_planet|²/2 − GM/((n−1)·r^(n−1))`, normalized from the starting circular orbit (`0`) to escape energy (`1`). Rises with hard burns before the moon visibly strays: the leading indicator. `v̄_planet` is the planet's velocity smoothed over ~0.5 s, and a 0.08 deadband clamps small values to 0 — raw `pv` jumps the instant the player thrusts, so unsmoothed energy flashes the moon amber on every tap (measured: a 200 ms tap reads 0.14 unsmoothed, 0 smoothed, with the moon at 1.28× orbit radius either way).
 - _distance danger_ — moon distance from the planet, normalized from 1.5× orbit radius (`0`) to the limit ring (`1`). Guarantees the color is red exactly when the moon reaches the ring.
 
 The limit ring itself fades in from 1.5× to 2.5× orbit radius and fades out when the moon returns. The ring is the loss line; the colors are the warning.
 
-**Recovery assist.** Gravity is conservative: without help, every thrust pulse pumps orbital energy that never decays, so `danger` ratchets up and any play style eventually loses the moon (measured during development with the assist disabled: a held burn escaped in 0.8 s; pulsed thrust died inside 12 s). The assist bleeds the moon's velocity toward the planet's, only while _energy danger_ is inside `assistZone` [0.35, 0.95], with a sine-bump strength profile that peaks mid-zone and fades to zero at 0.95 — grazes recover, sustained burns punch through. It is keyed to energy danger alone: a moon dragged outward at matched velocity has low energy danger, so nothing fights the drift toward the loss ring. Measured with the current `CONFIG`: pulsed 400 ms burns survive indefinitely (peak danger 0.06); a continuously held burn drags the moon across the ring in ~2.7 s, with the ring visible and the color climbing for the final ~1.5 s.
+**Recovery assist.** Gravity is conservative: without help, every thrust pulse pumps orbital energy that never decays, so `danger` ratchets up and any play style eventually loses the moon (measured with the assist disabled: a held burn escaped in 0.8 s; pulsed thrust died inside 12 s). The assist bleeds the moon's velocity toward the planet's, only while _energy danger_ is inside `assistZone` [0.35, 0.95], with a sine-bump strength profile that peaks mid-zone and fades to zero at 0.95 — grazes recover, sustained burns punch through. Keying on energy danger alone matters: a moon dragged outward at matched velocity has low energy danger, so nothing fights the drift toward the limit ring. Measured with the current `CONFIG`: pulsed 400 ms burns survive indefinitely (peak danger 0.06); a continuously held burn drags the moon across the ring in ~2.7 s, with the ring visible and the color climbing for the final ~1.5 s.
 
 **Asteroids.** Straight-line drift, no gravity. Spawn at a random point on a random screen edge. Aim: a ramping fraction (`targeting` 20% → 60%) targets the planet's position ±0.06 ×u jitter — camping one spot does not work — and the rest aim at a random point in the central 60% of the screen. Spawn interval ramps 2.5 s → 0.35 s and speed 0.12 → 0.30 ×u/s (±25% jitter) over the first 90 s of a run; live cap 40. Collision is a circle-circle distance check.
 
-**Tutorial.** Eight steps in `tutSteps`, two kinds. Teaching captions advance on timers alone (2.8–3.5 s); action steps gate on the player doing the thing, evaluated only after a 1.5 s dwell, with each gate requiring its condition freshly after entry (the burn gate arms only once danger has been below 0.4) — a pre-met condition cannot flash a step past:
+**Tutorial.** Eight steps in `tutSteps`, two kinds. Teaching captions advance on timers alone (2.8–3.5 s); action gates evaluate only after a 1.5 s dwell and require their condition met freshly after entry (the burn gate arms only once danger has been below 0.4) — a pre-met condition cannot flash a step past:
 
 1. move, with the moon hidden (gate: 0.7 s cumulative input; the moon then pops in)
 2. moon intro (timed)
 3. keep-orbit hint (timed)
 4. burn to red (gate: armed, then danger > 0.6)
 5. ease off (gate: danger < 0.35)
-6. dodge one rock (gate: rock fully off-screen and receding — its spawn point may legally sit off-screen, so "outside" alone would pass an inbound rock)
+6. dodge one asteroid (gate: asteroid fully off-screen and receding — its spawn point can sit off-screen, so "outside" alone would pass an inbound asteroid)
 7. asteroid ramp warning (timed)
 8. "you're ready" → fades into a run
 
-The rock always spawns 0.55 ×u from the planet toward the nearest screen edge at 1.5× `asteroids.speed[0]` — same arrival every run. There is no game over: a hit explodes, shows "try again", and respawns the rock; the moon crossing the limit ring interrupts with "you lost your moon — in a real run, that ends it", swaps in a fresh moon, and retries the step (a loss during ease-off retries from burn).
+The tutorial asteroid always spawns 0.55 ×u from the planet toward the nearest screen edge at 1.5× `asteroids.speed[0]` — same arrival every run. There is no game over: a hit explodes, shows "try again", and respawns the asteroid; the moon crossing the limit ring interrupts with "you lost your moon — in a real run, that ends it", swaps in a fresh moon, and retries the step (a loss during ease-off retries from burn).
 
 ## Tuning guide
 
-Every gameplay number lives in `CONFIG` at the top of `src/scripts/orbit.ts`. Lengths are fractions of `u = min(viewport width, height)` px, speeds ×u/s, accelerations ×u/s² — one feel across phone and desktop. Edit, save; the dev server hot-reloads.
+Every gameplay number lives in `CONFIG` at the top of `src/scripts/orbit.ts`, in the units defined in the intro. Edit, save; the dev server hot-reloads.
 
 | Key                                 | Value         | Effect of raising it                                                                              |
 | ----------------------------------- | ------------- | ------------------------------------------------------------------------------------------------- |
@@ -70,13 +72,13 @@ Every gameplay number lives in `CONFIG` at the top of `src/scripts/orbit.ts`. Le
 | `asteroids.radius`                  | [0.008, 0.02] | Asteroid size range                                                                               |
 | `asteroids.max`                     | 40            | Live asteroid cap                                                                                 |
 
-Acceptance bar after retuning (checked with the harness in Verification):
+Acceptance bar after retuning (check with the headless-browser recipe in Verification):
 
 1. Pulsed 400 ms burns survive indefinitely, peak danger ≤ 0.6.
 2. A continuously held burn loses the moon in 2–8 s.
 3. Terminal speed (`planet.thrust / planet.damping`) ≥ 0.8× `asteroids.speed[1]`, or late-game dodging fails.
 
-Constants outside `CONFIG` (edit in place if needed): physics step clamp 50 ms with 4 substeps, danger smoothing 10/s, planet-velocity smoothing 2/s with a 0.08 energy-danger deadband, trail 40 points sampled every 25 ms, joystick radius 0.07 ×u, asteroid cull margin 0.12 ×u (culling is off in the tutorial), tutorial gate dwell 1.5 s and timed captions 2.8–3.5 s, tutorial rock distance 0.55 ×u and speed 1.5× `asteroids.speed[0]`, fade 300 ms out / 400 ms in, burst-dump threshold 0.15 ×u per frame.
+Constants outside `CONFIG` (edit in place if needed): physics step clamp 50 ms with 4 substeps, danger smoothing 10/s, planet-velocity smoothing 2/s with a 0.08 energy-danger deadband, trail 40 points sampled every 25 ms, joystick radius 0.07 ×u, asteroid cull margin 0.12 ×u (culling is off in the tutorial), tutorial gate dwell 1.5 s and timed captions 2.8–3.5 s, tutorial asteroid distance 0.55 ×u and speed 1.5× `asteroids.speed[0]`, fade 300 ms out / 400 ms in, burst-dump threshold 0.15 ×u per frame.
 
 ## Architecture
 
