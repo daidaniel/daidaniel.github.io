@@ -35,12 +35,15 @@ const CONFIG = {
   },
 };
 
-// Palette: pure-black space, objects in the site's zinc/amber Tailwind colors.
+// Palette: pure-black space; UI in the site's zinc/amber Tailwind colors, the
+// planet in earth blues/greens.
 const BG = 0x000000;
 const AMBER = 0xfcd34d; // amber-300
 const WHITE = 0xfafafa; // zinc-50
 const GRAY = 0x71717a; // zinc-500
 const RED = 0xef4444; // red-500
+const BLUE = 0x2563eb; // blue-600 — earth ocean, explosion tint
+const BLUE_DARK = 0x1d4ed8; // blue-700 — thrust exhaust
 
 const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const MONO = '"JetBrains Mono", ui-monospace, monospace';
@@ -102,13 +105,15 @@ class GameScene extends Phaser.Scene {
 
   // Menu overlay (mode "menu" only).
   menuUi: Phaser.GameObjects.Container | null = null;
+  menuTween: Phaser.Tweens.Tween | null = null; // the prompt pulse — killed on menu exit
   tutorialBtn: Phaser.GameObjects.Text | null = null;
+
+  stars: Phaser.GameObjects.Image[] = []; // twinkling backdrop, depth 0
 
   // Tutorial state (mode "tutorial" only).
   tutStep = 0; // 1-based index into tutSteps
   tutStepAt = 0; // time.now when the current caption appeared (dwell / timers)
   tutMoveT = 0;
-  tutArmed = false; // burn step: danger must dip below 0.4 after entry before >0.6 counts
   tutInterrupted = 0; // step to re-enter after the moon-loss caption; 0 = none
   tutRespawning = false;
   tutCaption: Phaser.GameObjects.Text | null = null;
@@ -147,38 +152,38 @@ class GameScene extends Phaser.Scene {
     this.pv.set(0, 0);
     this.pvSmooth.set(0, 0);
     this.menuUi = null;
+    this.menuTween = null;
     this.tutorialBtn = null;
     this.tutCaption = null;
     this.tutSkip = null;
     this.tutInterrupted = 0;
     this.restarting = false;
     this.moonActive = true; // the fresh moon image below is visible by default
+    this.stars = []; // previous scene's display objects died at shutdown
 
     this.makeTextures();
     this.deriveConstants();
     const { width: w, height: h } = this.scale;
 
+    this.buildStars();
     this.trailGfx = this.add.graphics().setDepth(1);
     this.exhaust = this.add.particles(0, 0, "disc", {
       lifespan: 350,
       speed: { min: this.u * 0.03, max: this.u * 0.08 },
       scale: { start: this.planetR / 64 / 2.2, end: 0 },
       alpha: { start: 0.7, end: 0 },
-      tint: AMBER,
+      tint: BLUE_DARK,
       emitting: false,
     });
     this.exhaust.setDepth(2);
-    this.planet = this.add
-      .image(w / 2, h / 2, "disc")
-      .setTint(AMBER)
-      .setDepth(3);
+    this.planet = this.add.image(w / 2, h / 2, "earth").setDepth(3);
     this.moon = this.add.image(0, 0, "disc").setTint(WHITE).setDepth(4);
     this.boom = this.add.particles(0, 0, "disc", {
       lifespan: 650,
       speed: { min: this.u * 0.08, max: this.u * 0.3 },
       scale: { start: this.planetR / 64 / 2.5, end: 0 },
       alpha: { start: 1, end: 0 },
-      tint: [AMBER, WHITE, GRAY],
+      tint: [BLUE, WHITE, GRAY],
       emitting: false,
     });
     this.boom.setDepth(5);
@@ -282,7 +287,14 @@ class GameScene extends Phaser.Scene {
       .setOrigin(0.5);
     this.menuUi.add(prompt);
     if (!REDUCED_MOTION) {
-      this.tweens.add({ targets: prompt, alpha: 0.4, duration: 900, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+      this.menuTween = this.tweens.add({
+        targets: prompt,
+        alpha: 0.4,
+        duration: 900,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.InOut",
+      });
     }
     this.tutorialBtn = this.add
       .text(w / 2, h / 2 + this.u * 0.39, "tutorial", { fontFamily: MONO, fontSize: px * 0.8, color: "#fcd34d" })
@@ -294,10 +306,42 @@ class GameScene extends Phaser.Scene {
 
   destroyMenu() {
     if (!this.menuUi) return;
-    this.tweens.killAll(); // menu mode has no other tweens; drops the prompt pulse
+    this.menuTween?.destroy(); // targeted: star twinkles must survive
+    this.menuTween = null;
     this.menuUi.destroy(true);
     this.menuUi = null;
     this.tutorialBtn = null;
+  }
+
+  buildStars() {
+    for (const s of this.stars) {
+      this.tweens.killTweensOf(s);
+      s.destroy();
+    }
+    this.stars = [];
+    const { width: w, height: h } = this.scale;
+    const n = Math.round((w * h) / 15000);
+    for (let i = 0; i < n; i++) {
+      const d = lerp(1, 2, Math.random());
+      const star = this.add
+        .image(Math.random() * w, Math.random() * h, "disc")
+        .setDisplaySize(d, d)
+        .setTint(0xa1a1aa)
+        .setAlpha(lerp(0.15, 0.4, Math.random()))
+        .setDepth(0);
+      if (!REDUCED_MOTION) {
+        this.tweens.add({
+          targets: star,
+          alpha: 0.05,
+          duration: lerp(2000, 6000, Math.random()),
+          delay: Math.random() * 4000,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.InOut",
+        });
+      }
+      this.stars.push(star);
+    }
   }
 
   // Menu -> run happens in place (no restart): the idle sim is already a valid
@@ -342,14 +386,23 @@ class GameScene extends Phaser.Scene {
     },
     { caption: "only gravity holds it.\nmove gently — short taps, not long burns.", time: 3500 },
     {
-      caption: "now burn hard in one direction —\npush the trail to red.",
-      enter: () => (this.tutArmed = false),
-      done: () => {
-        if (this.danger < 0.4) this.tutArmed = true;
-        return this.tutArmed && this.danger > 0.6;
-      },
+      // Losing the moon IS this lesson: the ring cross routes here to step 5
+      // (see tutMoonLoss), the assist stays out of the way (see moonTick), and
+      // a 25 s timeout covers players too careful to ever lose it.
+      caption: "now move around fast —\nsee if you can shake your moon loose.",
+      done: () => this.time.now - this.tutStepAt > 25000,
     },
-    { caption: "good. ease off — let your moon settle.", done: () => this.danger < 0.35 },
+    {
+      caption: "past the gray ring, a moon is lost.\nin a real run, that ends it.",
+      time: 3000,
+      enter: () => this.setMoonActive(false),
+    },
+    {
+      caption:
+        "here's a new one. watch the warning signs:\nthe trail turns amber, then red, and the gray ring marks the limit.",
+      time: 3500,
+      enter: () => this.setMoonActive(true),
+    },
     {
       caption: "incoming asteroid — dodge it.\nif one touches you or your moon, the run ends.",
       enter: () => {
@@ -418,9 +471,15 @@ class GameScene extends Phaser.Scene {
     const s = this.tutSteps[this.tutStep - 1];
     if (s.time) {
       if (inStep > s.time) this.tutEnter(this.tutStep + 1);
-    } else if (s.done && inStep > 1500 && s.done(dt, input)) {
+    } else if (s.done && inStep > 2500 && s.done(dt, input)) {
       this.tutEnter(this.tutStep + 1);
     }
+  }
+
+  // Step 4 wants the moon lost: the ring cross advances the lesson instead of
+  // resetting, and the recovery assist stands down (see moonTick).
+  get inShakeStep(): boolean {
+    return this.mode === "tutorial" && this.tutStep === 4;
   }
 
   setMoonActive(on: boolean) {
@@ -443,11 +502,12 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: this.moon, scaleX: b, scaleY: b, duration: 300, ease: "Back.Out" });
   }
 
-  // The tutorial has no game over: crossing the ring swaps in a fresh moon,
-  // explains, and retries the step (recover retries from burn — a fresh moon
-  // has nothing to recover).
+  // The tutorial has no game over. In the shake step the ring cross is the
+  // goal — advance to the loss explanation. Anywhere else, explain, swap in a
+  // fresh moon, and retry the step.
   tutMoonLoss() {
-    this.tutInterrupted = this.tutStep === 5 ? 4 : this.tutStep;
+    if (this.inShakeStep) return this.tutEnter(5);
+    this.tutInterrupted = this.tutStep;
     this.tutStepAt = this.time.now;
     this.resetMoon();
     this.setCaption("you lost your moon — in a real run, that ends it.\nhere's a new one.");
@@ -503,6 +563,27 @@ class GameScene extends Phaser.Scene {
     g.fillPoints(pts, true);
     g.generateTexture("rock", 128, 128);
     g.destroy();
+    // Earth: blue disc with green splotches, clipped to the disc by the
+    // canvas composite mode.
+    const ct = this.textures.createCanvas("earth", 128, 128)!;
+    const ctx = ct.getContext();
+    ctx.fillStyle = "#2563eb"; // BLUE
+    ctx.beginPath();
+    ctx.arc(64, 64, 64, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.fillStyle = "#22c55e"; // green-500 land
+    for (let i = 0; i < 7; i++) {
+      const bx = 16 + Math.random() * 96;
+      const by = 16 + Math.random() * 96;
+      for (let j = 0; j < 4; j++) {
+        const br = 8 + Math.random() * 12;
+        ctx.beginPath();
+        ctx.arc(bx + (Math.random() - 0.5) * 28, by + (Math.random() - 0.5) * 28, br, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ct.refresh();
   }
 
   deriveConstants() {
@@ -566,6 +647,7 @@ class GameScene extends Phaser.Scene {
     }
     this.applySizes();
     this.layoutHud();
+    this.buildStars(); // re-cover the new area
     if (this.mode === "menu") {
       this.destroyMenu();
       this.buildMenu();
@@ -736,7 +818,7 @@ class GameScene extends Phaser.Scene {
     // ring), fading out near the red line so sustained burns punch through.
     const [zoneLo, zoneHi] = CONFIG.escape.assistZone;
     let assist = 0;
-    if (energyDanger > zoneLo && energyDanger < zoneHi) {
+    if (!this.inShakeStep && energyDanger > zoneLo && energyDanger < zoneHi) {
       assist = CONFIG.escape.assistStrength * Math.sin(Math.PI * ((energyDanger - zoneLo) / (zoneHi - zoneLo)));
     }
     if (assist > 0) {

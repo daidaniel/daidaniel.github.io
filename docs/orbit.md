@@ -10,7 +10,7 @@ Units: lengths are ×u, speeds ×u/s, accelerations ×u/s², where `u = min(view
 
 - **Desktop:** `WASD` / arrow keys apply thrust. The planet has momentum — it drifts and decelerates, it does not stop with the key.
 - **Touch:** press anywhere and drag — a floating joystick appears at the touch point; the drag vector is the thrust.
-- **Start:** the page loads a start screen (idle sim + `tutorial` button). Any key or tap starts a run; tapping `tutorial` starts an eight-step interactive tutorial (see Mechanics). `skip tutorial →` jumps straight into a run.
+- **Start:** the page loads a start screen (idle sim + `tutorial` button). Any key or tap starts a run; tapping `tutorial` starts a nine-step interactive tutorial (see Mechanics). `skip tutorial →` jumps straight into a run.
 - **Restart:** after game over, tap or press `R` / `Space` / `Enter`. Restart goes directly into a new run; the start screen appears only on page load.
 
 A run ends three ways:
@@ -34,18 +34,19 @@ The limit ring itself fades in from 1.5× to 2.5× orbit radius and fades out wh
 
 **Asteroids.** Straight-line drift, no gravity. Spawn at a random point on a random screen edge. Aim: a ramping fraction (`targeting` 20% → 60%) targets the planet's position ±0.06 ×u jitter — camping one spot does not work — and the rest aim at a random point in the central 60% of the screen. Spawn interval ramps 2.5 s → 0.35 s and speed 0.12 → 0.30 ×u/s (±25% jitter) over the first 90 s of a run; live cap 40. Collision is a circle-circle distance check.
 
-**Tutorial.** Eight steps in `tutSteps`, two kinds. Teaching captions advance on timers alone (2.8–3.5 s); action gates evaluate only after a 1.5 s dwell and require their condition met freshly after entry (the burn gate arms only once danger has been below 0.4) — a pre-met condition cannot flash a step past:
+**Tutorial.** Nine steps in `tutSteps`, two kinds. Teaching captions advance on timers alone (2.8–3.5 s); action gates evaluate only after a 2.5 s dwell and require their condition met freshly after entry — a pre-met condition cannot flash a step past:
 
 1. move, with the moon hidden (gate: 0.7 s cumulative input; the moon then pops in)
 2. moon intro (timed)
 3. keep-orbit hint (timed)
-4. burn to red (gate: armed, then danger > 0.6)
-5. ease off (gate: danger < 0.35)
-6. dodge one asteroid (gate: asteroid fully off-screen and receding — its spawn point can sit off-screen, so "outside" alone would pass an inbound asteroid)
-7. asteroid ramp warning (timed)
-8. "you're ready" → fades into a run
+4. shake the moon loose (gate: the moon crosses the limit ring — losing it is the lesson, so the recovery assist stands down for this step; a 25 s timeout advances players too careful to lose it)
+5. loss explanation (timed; the moon is gone)
+6. warning signs — trail colors and the limit ring (timed; a fresh moon pops in)
+7. dodge one asteroid (gate: asteroid fully off-screen and receding — its spawn point can sit off-screen, so "outside" alone would pass an inbound asteroid)
+8. asteroid ramp warning (timed)
+9. "you're ready" → fades into a run
 
-The tutorial asteroid always spawns 0.55 ×u from the planet toward the nearest screen edge at 1.5× `asteroids.speed[0]` — same arrival every run. There is no game over: a hit explodes, shows "try again", and respawns the asteroid; the moon crossing the limit ring interrupts with "you lost your moon — in a real run, that ends it", swaps in a fresh moon, and retries the step (a loss during ease-off retries from burn).
+The tutorial asteroid always spawns 0.55 ×u from the planet toward the nearest screen edge at 1.5× `asteroids.speed[0]` — same arrival every run. There is no game over: a hit explodes, shows "try again", and respawns the asteroid. Outside step 4, the moon crossing the limit ring interrupts with "you lost your moon — in a real run, that ends it", swaps in a fresh moon, and retries the step.
 
 ## Tuning guide
 
@@ -78,7 +79,7 @@ Acceptance bar after retuning (check with the headless-browser recipe in Verific
 2. A continuously held burn loses the moon in 2–8 s.
 3. Terminal speed (`planet.thrust / planet.damping`) ≥ 0.8× `asteroids.speed[1]`, or late-game dodging fails.
 
-Constants outside `CONFIG` (edit in place if needed): physics step clamp 50 ms with 4 substeps, danger smoothing 10/s, planet-velocity smoothing 2/s with a 0.08 energy-danger deadband, trail 40 points sampled every 25 ms, joystick radius 0.07 ×u, asteroid cull margin 0.12 ×u (culling is off in the tutorial), tutorial gate dwell 1.5 s and timed captions 2.8–3.5 s, tutorial asteroid distance 0.55 ×u and speed 1.5× `asteroids.speed[0]`, fade 300 ms out / 400 ms in, burst-dump threshold 0.15 ×u per frame.
+Constants outside `CONFIG` (edit in place if needed): physics step clamp 50 ms with 4 substeps, danger smoothing 10/s, planet-velocity smoothing 2/s with a 0.08 energy-danger deadband, trail 40 points sampled every 25 ms, joystick radius 0.07 ×u, asteroid cull margin 0.12 ×u (culling is off in the tutorial), tutorial gate dwell 2.5 s, timed captions 2.8–3.5 s, shake-step timeout 25 s, tutorial asteroid distance 0.55 ×u and speed 1.5× `asteroids.speed[0]`, starfield ~1 star per 15,000 px², fade 300 ms out / 400 ms in, burst-dump threshold 0.15 ×u per frame.
 
 ## Architecture
 
@@ -87,7 +88,7 @@ Constants outside `CONFIG` (edit in place if needed): physics step clamp 50 ms w
 - One scene, four modes: `menu` (idle sim + start UI), `tutorial`, `run`, `over`. Mode transitions: menu → run happens in place so the dismissing tap can seed the joystick; every other entry into a run goes through `fadeRestart()` — 300 ms camera fade-out, `scene.restart({ mode: "run" })`, 400 ms fade-in — with `create()` as the single reset path. Gotcha: Phaser's `restart()` without arguments reuses the previous start data — always pass `{ mode }` explicitly.
 - Physics: `a = -GM·r̂/r^n` (`n = moon.gravityFalloff`) integrated with semi-implicit Euler — velocity before position (plain Euler spirals outward). `GM = v0² · orbitRadius^(n−1)` with `v0 = 2π·orbitRadius/period`, so the period is exact at the starting radius for any `n`; `circSpeed(r)` gives the circular speed elsewhere (tests re-pin orbits with it). Softening (`r² + ε²`, ε = `moon.softening` × planet radius) caps close-pass acceleration: no slingshot flings, no numeric blow-up when the moon is dragged through the planet.
 - Sizing: `Phaser.Scale.RESIZE` fills the viewport; every constant derives from `u` per `deriveConstants()`. On resize, constants re-derive and the moon's offset, both velocities, and asteroid sizes/velocities all rescale by the u-ratio — relative physics state (`r/orbitR0`, `E/E0`) is continuous through mobile URL-bar resizes.
-- Art: two runtime-generated textures (`disc`, jittered-polygon `rock`) tinted per object — no asset files. Swap them for SVGs by loading real textures and deleting `makeTextures()`.
+- Art: three runtime-generated textures, no asset files — `disc` and jittered-polygon `rock` (white, tinted per object), plus `earth` (canvas texture: blue-600 disc, green-500 splotches clipped by `source-atop`). Exhaust particles are blue-700; the explosion mixes blue/white/gray; danger amber/red belongs to the moon alone. A starfield of 1–2 px zinc dots (~1 per 15,000 px², alpha twinkling on 2–6 s cycles, static under `prefers-reduced-motion`) sits at depth 0 and rebuilds on resize. Swap textures for SVGs by loading real ones and deleting `makeTextures()`.
 - `window.__orbit` exposes the `Phaser.Game` instance in dev builds only (`import.meta.env.DEV`); the scene is `__orbit.scene.keys.main`.
 - Dev diagnostics (also dev-only): backtick toggles a debug HUD — moon distance, relative speed, energy, combined danger with its energy/distance split, assist, dt; a 90-frame ring buffer dumps to the console via `console.warn` whenever the moon's speed jumps more than 0.15 ×u in one frame. Start here for any telegraph or physics report.
 
