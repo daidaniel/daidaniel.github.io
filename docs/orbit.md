@@ -21,14 +21,14 @@ A run ends three ways:
 
 **Moon.** The moon orbits under gravity with a configurable falloff — `a ∝ 1/r^n`, `n = moon.gravityFalloff` (1.5 shipped; 2 = real inverse-square) — and reacts passively to planet movement: drag the planet and the orbit deforms. `n = 1.5` flattens the force curve ~5× across the playfield (1/r² varies ~25×): less sticky up close, stronger at range, and orbits precess slowly instead of closing into ellipses. Farther is still slower: at 1.6× the starting radius the measured angular speed is 0.56× (theory: 1.6^-1.25 = 0.556).
 
-**Danger telegraph.** One 0–1 value, `danger`, drives the moon trail color zinc → amber (0.5) → red (1.0). It is the maximum of two signals:
+**Danger telegraph.** One 0–1 value, `danger`, colors the moon and its trail zinc → amber (0.5) → red (1.0). It is the maximum of two signals:
 
-- _energy danger_ — specific orbital energy `E = |v_moon − v_planet|²/2 − GM/((n−1)·r^(n−1))`, normalized from the starting circular orbit (`0`) to escape energy (`1`). Rises with hard burns before the moon visibly strays: the leading indicator.
-- _distance danger_ — moon distance from the planet, normalized from 1.5× orbit radius (`0`) to the limit ring (`1`). Guarantees the trail is red exactly when the moon reaches the ring.
+- _energy danger_ — specific orbital energy `E = |v_moon − v̄_planet|²/2 − GM/((n−1)·r^(n−1))`, normalized from the starting circular orbit (`0`) to escape energy (`1`). Rises with hard burns before the moon visibly strays: the leading indicator. `v̄_planet` is the planet's velocity smoothed over ~0.5 s, and a 0.08 deadband clamps small values to 0 — raw `pv` jumps the instant the player thrusts, which used to flash the moon amber on every tap (measured: a 200 ms tap spiked danger to 0.14 with the moon at 1.28× orbit radius; after the fix, 0).
+- _distance danger_ — moon distance from the planet, normalized from 1.5× orbit radius (`0`) to the limit ring (`1`). Guarantees the color is red exactly when the moon reaches the ring.
 
 The limit ring itself fades in from 1.5× to 2.5× orbit radius and fades out when the moon returns. The ring is the loss line; the colors are the warning.
 
-**Recovery assist.** Gravity is conservative: without help, every thrust pulse pumps orbital energy that never decays, so `danger` ratchets up and any play style eventually loses the moon (measured during development with the assist disabled: a held burn escaped in 0.8 s; pulsed thrust died inside 12 s). The assist bleeds the moon's velocity toward the planet's, only while _energy danger_ is inside `assistZone` [0.35, 0.95], with a sine-bump strength profile that peaks mid-zone and fades to zero at 0.95 — grazes recover, sustained burns punch through. It is keyed to energy danger alone: a moon dragged outward at matched velocity has low energy danger, so nothing fights the drift toward the loss ring. Measured with assist at `gravityFalloff` 1.5: pulsed 400 ms burns survive indefinitely (peak danger 0.16); a continuously held burn drags the moon across the ring in ~3.3 s, with the ring visible and the trail red for the final ~2 s.
+**Recovery assist.** Gravity is conservative: without help, every thrust pulse pumps orbital energy that never decays, so `danger` ratchets up and any play style eventually loses the moon (measured during development with the assist disabled: a held burn escaped in 0.8 s; pulsed thrust died inside 12 s). The assist bleeds the moon's velocity toward the planet's, only while _energy danger_ is inside `assistZone` [0.35, 0.95], with a sine-bump strength profile that peaks mid-zone and fades to zero at 0.95 — grazes recover, sustained burns punch through. It is keyed to energy danger alone: a moon dragged outward at matched velocity has low energy danger, so nothing fights the drift toward the loss ring. Measured with the current `CONFIG`: pulsed 400 ms burns survive indefinitely (peak danger 0.06); a continuously held burn drags the moon across the ring in ~2.7 s, with the ring visible and the color climbing for the final ~1.5 s.
 
 **Asteroids.** Straight-line drift, no gravity. Spawn at a random point on a random screen edge. Aim: a ramping fraction (`targeting` 20% → 60%) targets the planet's position ±0.06 ×u jitter — camping one spot does not work — and the rest aim at a random point in the central 60% of the screen. Spawn interval ramps 2.5 s → 0.35 s and speed 0.12 → 0.30 ×u/s (±25% jitter) over the first 90 s of a run; live cap 40. Collision is a circle-circle distance check.
 
@@ -76,7 +76,7 @@ Acceptance bar after retuning (checked with the harness in Verification):
 2. A continuously held burn loses the moon in 2–8 s.
 3. Terminal speed (`planet.thrust / planet.damping`) ≥ 0.8× `asteroids.speed[1]`, or late-game dodging fails.
 
-Constants outside `CONFIG` (edit in place if needed): physics step clamp 50 ms with 4 substeps, danger smoothing 10/s, trail 40 points sampled every 25 ms, joystick radius 0.07 ×u, asteroid cull margin 0.12 ×u (culling is off in the tutorial), tutorial gate dwell 1.5 s and timed captions 2.8–3.5 s, tutorial rock distance 0.55 ×u and speed 1.5× `asteroids.speed[0]`, fade 300 ms out / 400 ms in, burst-dump threshold 0.15 ×u per frame.
+Constants outside `CONFIG` (edit in place if needed): physics step clamp 50 ms with 4 substeps, danger smoothing 10/s, planet-velocity smoothing 2/s with a 0.08 energy-danger deadband, trail 40 points sampled every 25 ms, joystick radius 0.07 ×u, asteroid cull margin 0.12 ×u (culling is off in the tutorial), tutorial gate dwell 1.5 s and timed captions 2.8–3.5 s, tutorial rock distance 0.55 ×u and speed 1.5× `asteroids.speed[0]`, fade 300 ms out / 400 ms in, burst-dump threshold 0.15 ×u per frame.
 
 ## Architecture
 
@@ -87,7 +87,7 @@ Constants outside `CONFIG` (edit in place if needed): physics step clamp 50 ms w
 - Sizing: `Phaser.Scale.RESIZE` fills the viewport; every constant derives from `u` per `deriveConstants()`. On resize, constants re-derive and the moon's offset, both velocities, and asteroid sizes/velocities all rescale by the u-ratio — relative physics state (`r/orbitR0`, `E/E0`) is continuous through mobile URL-bar resizes.
 - Art: two runtime-generated textures (`disc`, jittered-polygon `rock`) tinted per object — no asset files. Swap them for SVGs by loading real textures and deleting `makeTextures()`.
 - `window.__orbit` exposes the `Phaser.Game` instance in dev builds only (`import.meta.env.DEV`); the scene is `__orbit.scene.keys.main`.
-- Dev diagnostics (also dev-only): backtick toggles a debug HUD (moon distance, relative speed, energy, danger, assist, dt); a 90-frame ring buffer dumps to the console via `console.warn` whenever the moon's speed jumps more than 0.15 ×u in one frame — the tool for chasing "sudden burst" reports.
+- Dev diagnostics (also dev-only): backtick toggles a debug HUD — moon distance, relative speed, energy, combined danger with its energy/distance split, assist, dt; a 90-frame ring buffer dumps to the console via `console.warn` whenever the moon's speed jumps more than 0.15 ×u in one frame. Start here for any telegraph or physics report.
 
 ## Verification
 

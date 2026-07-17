@@ -88,6 +88,7 @@ class GameScene extends Phaser.Scene {
   planet!: Phaser.GameObjects.Image;
   moon!: Phaser.GameObjects.Image;
   pv = new Phaser.Math.Vector2(); // planet velocity
+  pvSmooth = new Phaser.Math.Vector2(); // ~0.5s-smoothed pv — the danger readout's reference frame
   mv = new Phaser.Math.Vector2(); // moon velocity
   asteroids: Asteroid[] = [];
   trail: { x: number; y: number }[] = [];
@@ -144,6 +145,7 @@ class GameScene extends Phaser.Scene {
     this.joyId = null;
     this.joyVec.set(0, 0);
     this.pv.set(0, 0);
+    this.pvSmooth.set(0, 0);
     this.menuUi = null;
     this.tutorialBtn = null;
     this.tutCaption = null;
@@ -717,9 +719,14 @@ class GameScene extends Phaser.Scene {
     // exactly when the moon reaches it).
     const ring = CONFIG.escape.ring;
     const r = Math.hypot(this.moon.x - this.planet.x, this.moon.y - this.planet.y);
-    const relV2 = (this.mv.x - this.pv.x) ** 2 + (this.mv.y - this.pv.y) ** 2;
+    // Energy is measured against a smoothed planet velocity: raw pv jumps the
+    // instant the player thrusts, which used to flash the moon amber on every
+    // tap. The 0.08 deadband eats the residue; escape energy still maps to 1.
+    this.pvSmooth.x += (this.pv.x - this.pvSmooth.x) * Math.min(1, dt * 2);
+    this.pvSmooth.y += (this.pv.y - this.pvSmooth.y) * Math.min(1, dt * 2);
+    const relV2 = (this.mv.x - this.pvSmooth.x) ** 2 + (this.mv.y - this.pvSmooth.y) ** 2;
     const E = relV2 / 2 - this.GM / ((n - 1) * Math.pow(r, n - 1));
-    const energyDanger = clamp01(1 - E / this.E0); // E0 (bound) -> 0, E=0 (escape energy) -> 1
+    const energyDanger = clamp01((clamp01(1 - E / this.E0) - 0.08) / 0.92); // E0 (bound) -> 0, E=0 (escape energy) -> 1
     const distDanger = clamp01((r / this.orbitR0 - ring.fadeStart) / (ring.radius - ring.fadeStart));
     const target = Math.max(energyDanger, distDanger);
     this.danger += (target - this.danger) * Math.min(1, dt * 10);
@@ -767,11 +774,11 @@ class GameScene extends Phaser.Scene {
     }
     this.moon.setTint(this.danger > 0.5 ? col : WHITE);
 
-    if (import.meta.env.DEV) this.debugTick(dt, r, Math.sqrt(relV2), E, assist);
+    if (import.meta.env.DEV) this.debugTick(dt, r, Math.sqrt(relV2), E, assist, energyDanger, distDanger);
   }
 
   // Dev-only: record the frame, dump the buffer on a moon-speed jump, feed the HUD.
-  debugTick(dt: number, r: number, relV: number, E: number, assist: number) {
+  debugTick(dt: number, r: number, relV: number, E: number, assist: number, eDanger: number, dDanger: number) {
     const moonSpeed = this.mv.length();
     const row = {
       t: +(this.time.now / 1000).toFixed(2),
@@ -782,6 +789,8 @@ class GameScene extends Phaser.Scene {
       relSpeed: +(relV / this.u).toFixed(3), // ×u/s
       EOverAbsE0: +(E / Math.abs(this.E0)).toFixed(2),
       danger: +this.danger.toFixed(2),
+      eDanger: +eDanger.toFixed(2),
+      dDanger: +dDanger.toFixed(2),
       assist: +assist.toFixed(2),
     };
     this.debugLog.push(row);
@@ -794,7 +803,7 @@ class GameScene extends Phaser.Scene {
     this.lastMoonSpeed = moonSpeed;
     this.debugHud?.setText(
       `r/r0 ${row.rOverR0}  relV ${row.relSpeed}u/s  E/|E0| ${row.EOverAbsE0}\n` +
-        `danger ${row.danger}  assist ${row.assist}  dt ${row.dt}  ${this.mode}`,
+        `danger ${row.danger} (energy ${row.eDanger} | dist ${row.dDanger})  assist ${row.assist}  dt ${row.dt}  ${this.mode}`,
     );
   }
 
