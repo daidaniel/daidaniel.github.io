@@ -35,15 +35,12 @@ const CONFIG = {
   },
 };
 
-// Palette: pure-black space; UI in the site's zinc/amber Tailwind colors, the
-// planet in earth blues/greens.
+// Palette: pure-black space, objects in the site's zinc/amber Tailwind colors.
 const BG = 0x000000;
 const AMBER = 0xfcd34d; // amber-300
 const WHITE = 0xfafafa; // zinc-50
 const GRAY = 0x71717a; // zinc-500
 const RED = 0xef4444; // red-500
-const BLUE = 0x2563eb; // blue-600 — earth ocean, explosion tint
-const BLUE_DARK = 0x1d4ed8; // blue-700 — thrust exhaust
 
 const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const MONO = '"JetBrains Mono", ui-monospace, monospace';
@@ -98,6 +95,8 @@ class GameScene extends Phaser.Scene {
 
   trailGfx!: Phaser.GameObjects.Graphics;
   joyGfx!: Phaser.GameObjects.Graphics;
+  glow!: Phaser.GameObjects.Image; // engine glow on the planet's trailing edge
+  exhaustT = 0; // throttles wisp emission to ~30/s
   exhaust!: Phaser.GameObjects.Particles.ParticleEmitter;
   boom!: Phaser.GameObjects.Particles.ParticleEmitter;
   scoreText!: Phaser.GameObjects.Text;
@@ -145,6 +144,7 @@ class GameScene extends Phaser.Scene {
     this.ringA = 0;
     this.spawnT = CONFIG.asteroids.interval[0]; // opening grace: no rock in the first seconds
     this.trailT = 0;
+    this.exhaustT = 0;
     this.asteroids = [];
     this.trail = [];
     this.joyId = null;
@@ -168,22 +168,23 @@ class GameScene extends Phaser.Scene {
     this.buildStars();
     this.trailGfx = this.add.graphics().setDepth(1);
     this.exhaust = this.add.particles(0, 0, "disc", {
-      lifespan: 350,
+      lifespan: 250,
       speed: { min: this.u * 0.03, max: this.u * 0.08 },
-      scale: { start: this.planetR / 64 / 2.2, end: 0 },
-      alpha: { start: 0.7, end: 0 },
-      tint: BLUE_DARK,
+      scale: { start: this.planetR / 64 / 4.4, end: 0 },
+      alpha: { start: 0.35, end: 0 },
+      tint: AMBER,
       emitting: false,
     });
     this.exhaust.setDepth(2);
-    this.planet = this.add.image(w / 2, h / 2, "earth").setDepth(3);
+    this.glow = this.add.image(0, 0, "glow").setTint(AMBER).setAlpha(0).setDepth(2);
+    this.planet = this.add.image(w / 2, h / 2, "planet").setDepth(3);
     this.moon = this.add.image(0, 0, "disc").setTint(WHITE).setDepth(4);
     this.boom = this.add.particles(0, 0, "disc", {
       lifespan: 650,
       speed: { min: this.u * 0.08, max: this.u * 0.3 },
       scale: { start: this.planetR / 64 / 2.5, end: 0 },
       alpha: { start: 1, end: 0 },
-      tint: [BLUE, WHITE, GRAY],
+      tint: [AMBER, WHITE, GRAY],
       emitting: false,
     });
     this.boom.setDepth(5);
@@ -322,17 +323,20 @@ class GameScene extends Phaser.Scene {
     const { width: w, height: h } = this.scale;
     const n = Math.round((w * h) / 15000);
     for (let i = 0; i < n; i++) {
-      const d = lerp(1, 2, Math.random());
+      const d = lerp(1, 3, Math.random());
+      const base = lerp(0.4, 0.8, Math.random());
       const star = this.add
         .image(Math.random() * w, Math.random() * h, "disc")
         .setDisplaySize(d, d)
-        .setTint(0xa1a1aa)
-        .setAlpha(lerp(0.15, 0.4, Math.random()))
+        .setTint(Math.random() < 0.25 ? WHITE : 0xd4d4d8)
+        .setAlpha(base)
         .setDepth(0);
       if (!REDUCED_MOTION) {
+        // Dim to 60% of base, never out — a full blackout reads as objects
+        // blinking into existence, not as stars.
         this.tweens.add({
           targets: star,
-          alpha: 0.05,
+          alpha: base * 0.6,
           duration: lerp(2000, 6000, Math.random()),
           delay: Math.random() * 4000,
           yoyo: true,
@@ -563,27 +567,35 @@ class GameScene extends Phaser.Scene {
     g.fillPoints(pts, true);
     g.generateTexture("rock", 128, 128);
     g.destroy();
-    // Earth: blue disc with green splotches, clipped to the disc by the
-    // canvas composite mode.
-    const ct = this.textures.createCanvas("earth", 128, 128)!;
+    // Planet: amber disc with wavy darker latitude bands, clipped to the disc
+    // by the canvas composite mode. Waviness is random per load.
+    const ct = this.textures.createCanvas("planet", 128, 128)!;
     const ctx = ct.getContext();
-    ctx.fillStyle = "#2563eb"; // BLUE
+    ctx.fillStyle = "#fcd34d"; // AMBER
     ctx.beginPath();
     ctx.arc(64, 64, 64, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalCompositeOperation = "source-atop";
-    ctx.fillStyle = "#22c55e"; // green-500 land
-    for (let i = 0; i < 7; i++) {
-      const bx = 16 + Math.random() * 96;
-      const by = 16 + Math.random() * 96;
-      for (let j = 0; j < 4; j++) {
-        const br = 8 + Math.random() * 12;
-        ctx.beginPath();
-        ctx.arc(bx + (Math.random() - 0.5) * 28, by + (Math.random() - 0.5) * 28, br, 0, Math.PI * 2);
-        ctx.fill();
-      }
+    ctx.strokeStyle = "#f59e0b"; // amber-500
+    const wave = () => (Math.random() - 0.5) * 12;
+    for (const y of [38, 64, 92]) {
+      ctx.lineWidth = lerp(10, 18, Math.random());
+      ctx.beginPath();
+      ctx.moveTo(-8, y + wave());
+      ctx.quadraticCurveTo(43, y + wave(), 74, y + wave());
+      ctx.quadraticCurveTo(105, y + wave(), 136, y + wave());
+      ctx.stroke();
     }
     ct.refresh();
+    // Soft radial falloff for the engine glow.
+    const gt = this.textures.createCanvas("glow", 64, 64)!;
+    const gctx = gt.getContext();
+    const grad = gctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    gctx.fillStyle = grad;
+    gctx.fillRect(0, 0, 64, 64);
+    gt.refresh();
   }
 
   deriveConstants() {
@@ -609,6 +621,7 @@ class GameScene extends Phaser.Scene {
 
   applySizes() {
     this.planet.setDisplaySize(this.planetR * 2, this.planetR * 2);
+    this.glow.setDisplaySize(this.planetR * 1.8, this.planetR * 1.8);
     this.moon.setDisplaySize(this.moonR * 2, this.moonR * 2);
     for (const a of this.asteroids) a.img.setDisplaySize(a.r * 2, a.r * 2);
   }
@@ -701,10 +714,18 @@ class GameScene extends Phaser.Scene {
       if (Math.abs(this.pv.y) > this.u * 0.1) this.squash(false);
       this.pv.y = 0;
     }
+    // Thrust visuals: soft glow on the trailing edge + throttled amber wisps.
     if (input.length() > 0.1) {
       const n = input.clone().normalize();
-      this.exhaust.emitParticleAt(this.planet.x - n.x * this.planetR, this.planet.y - n.y * this.planetR, 1);
+      this.glow.setPosition(this.planet.x - n.x * this.planetR, this.planet.y - n.y * this.planetR);
+      this.exhaustT += dt;
+      if (this.exhaustT > 0.033) {
+        this.exhaustT = 0;
+        this.exhaust.emitParticleAt(this.glow.x, this.glow.y, 1);
+      }
     }
+    const glowTarget = input.length() > 0.1 ? 0.35 : 0;
+    this.glow.alpha += (glowTarget - this.glow.alpha) * Math.min(1, dt * 10);
 
     // Moon physics + telegraphs + loss live in moonTick; it can end the run.
     if (this.moonActive) this.moonTick(dt);
