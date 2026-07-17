@@ -1,5 +1,37 @@
 import Phaser from "phaser";
 
+// ── Tuning ────────────────────────────────────────────────────────────────
+// Every gameplay number lives here. Lengths are fractions of u, speeds u/s,
+// accelerations u/s² — where u = min(viewport width, height) in px — so phone
+// and desktop feel the same. Edit, save, and the dev server hot-reloads.
+// docs/orbit.md ("Tuning guide") explains what each knob does to the feel.
+const CONFIG = {
+  planet: {
+    radius: 0.03, // ×u
+    thrust: 0.3, // ×u/s² at full input — balance against moon.period (see docs)
+    damping: 1.0, // 1/s velocity decay; terminal speed = thrust / damping
+  },
+  moon: {
+    radius: 0.012, // ×u
+    orbitRadius: 0.18, // ×u — starting circular orbit radius
+    period: 6, // s per starting orbit; sets GM, so binding strength too
+  },
+  escape: {
+    // The gray ring is the loss line: the moon crossing ring.radius ends the
+    // run. Its alpha fades in from fadeStart to fadeEnd (both ×orbitRadius).
+    ring: { radius: 2.5, fadeStart: 1.4, fadeEnd: 2.2 },
+    assistZone: [0.5, 0.95], // danger range where the recovery assist acts
+    assistStrength: 0.55, // 1/s peak bleed of moon velocity toward the planet's
+  },
+  asteroids: {
+    radius: [0.008, 0.02] as const, // ×u, spawn range
+    speed: [0.12, 0.3] as const, // ×u/s at t=0 → t=rampTime
+    interval: [2.5, 0.35] as const, // s between spawns at t=0 → t=rampTime
+    rampTime: 90, // s of survival until full difficulty
+    max: 40, // live asteroid cap
+  },
+};
+
 // Palette: the site's zinc/amber Tailwind colors.
 const BG = 0x18181b; // zinc-900
 const AMBER = 0xfcd34d; // amber-300
@@ -30,6 +62,8 @@ interface Asteroid {
   r: number;
 }
 
+type Mode = "menu" | "tutorial" | "run" | "over";
+
 class GameScene extends Phaser.Scene {
   // Everything size- or speed-like derives from u = min(width, height) so
   // phone and desktop feel the same. Re-derived on resize.
@@ -41,10 +75,10 @@ class GameScene extends Phaser.Scene {
   thrust = 0;
   E0 = 0; // specific orbital energy of the starting circular orbit (negative)
 
-  over = false;
+  mode: Mode = "menu";
   elapsed = 0;
-  danger = 0; // smoothed 0..1, 1 = at escape energy
-  escapeT = 0;
+  danger = 0; // smoothed 0..1, 1 = at the loss line (energy or distance)
+  ringA = 0; // smoothed 0..1 visibility of the limit ring
   spawnT = 0;
   trailT = 0;
 
@@ -62,6 +96,18 @@ class GameScene extends Phaser.Scene {
   scoreText!: Phaser.GameObjects.Text;
   hintText!: Phaser.GameObjects.Text;
 
+  // Menu overlay (mode "menu" only).
+  menuUi: Phaser.GameObjects.Container | null = null;
+  tutorialBtn: Phaser.GameObjects.Text | null = null;
+
+  // Tutorial state (mode "tutorial" only).
+  tutStep = 0;
+  tutMoveT = 0;
+  tutPeaked = false;
+  tutRespawning = false;
+  tutCaption: Phaser.GameObjects.Text | null = null;
+  tutSkip: Phaser.GameObjects.Text | null = null;
+
   keys!: Record<
     "W" | "A" | "S" | "D" | "UP" | "LEFT" | "DOWN" | "RIGHT" | "R" | "SPACE" | "ENTER",
     Phaser.Input.Keyboard.Key
@@ -74,18 +120,22 @@ class GameScene extends Phaser.Scene {
     super("main");
   }
 
-  create() {
-    this.over = false;
+  create(data: { mode?: Mode } = {}) {
+    this.mode = data.mode === "run" ? "run" : "menu";
     this.elapsed = 0;
     this.danger = 0;
-    this.escapeT = 0;
-    this.spawnT = 0;
+    this.ringA = 0;
+    this.spawnT = CONFIG.asteroids.interval[0]; // opening grace: no rock in the first seconds
     this.trailT = 0;
     this.asteroids = [];
     this.trail = [];
     this.joyId = null;
     this.joyVec.set(0, 0);
     this.pv.set(0, 0);
+    this.menuUi = null;
+    this.tutorialBtn = null;
+    this.tutCaption = null;
+    this.tutSkip = null;
 
     this.makeTextures();
     this.deriveConstants();
@@ -127,13 +177,29 @@ class GameScene extends Phaser.Scene {
       .text(0, 0, "wasd / arrows — or drag — to move", { fontFamily: MONO, color: "#71717a" })
       .setOrigin(0.5, 1)
       .setDepth(10);
+    const inRun = this.mode === "run";
+    this.scoreText.setVisible(inRun);
+    this.hintText.setVisible(inRun);
     this.layoutHud();
+    if (this.mode === "menu") this.buildMenu();
 
     this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,LEFT,DOWN,RIGHT,R,SPACE,ENTER") as GameScene["keys"];
+    this.input.keyboard!.on("keydown", () => {
+      if (this.mode === "menu") this.beginRun();
+    });
 
-    // Floating joystick: appears where the pointer lands, drag vector = thrust.
+    // One scene-level pointer handler routes menu/tutorial taps and the
+    // floating joystick (appears where the pointer lands, drag = thrust).
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
-      if (this.over || this.joyId !== null) return;
+      if (this.mode === "menu") {
+        if (this.hitText(this.tutorialBtn, p)) return this.beginTutorial();
+        this.beginRun(); // fall through: the same press seeds the joystick below
+      } else if (this.mode === "tutorial" && this.hitText(this.tutSkip, p)) {
+        return this.scene.restart({ mode: "run" });
+      } else if (this.mode === "over") {
+        return;
+      }
+      if (this.joyId !== null) return;
       this.joyId = p.id;
       this.joyBase.set(p.x, p.y);
       this.joyVec.set(0, 0);
@@ -156,6 +222,139 @@ class GameScene extends Phaser.Scene {
     this.scale.on("resize", onResize);
     this.events.once("shutdown", () => this.scale.off("resize", onResize));
   }
+
+  hitText(t: Phaser.GameObjects.Text | null, p: Phaser.Input.Pointer): boolean {
+    return t !== null && t.getBounds().contains(p.x, p.y);
+  }
+
+  // ── Menu ──────────────────────────────────────────────────────────────
+
+  buildMenu() {
+    const { width: w, height: h } = this.scale;
+    const px = Math.max(16, Math.round(this.u * 0.032));
+    this.menuUi = this.add.container(0, 0).setDepth(20);
+    this.menuUi.add(
+      this.add
+        .text(w / 2, h / 2 - this.u * 0.32, "orbit", { fontFamily: MONO, fontSize: px * 2.6, color: "#fafafa" })
+        .setOrigin(0.5),
+    );
+    const prompt = this.add
+      .text(w / 2, h / 2 + this.u * 0.3, "tap or press any key to play", {
+        fontFamily: MONO,
+        fontSize: px * 0.8,
+        color: "#a1a1aa",
+      })
+      .setOrigin(0.5);
+    this.menuUi.add(prompt);
+    if (!REDUCED_MOTION) {
+      this.tweens.add({ targets: prompt, alpha: 0.4, duration: 900, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+    }
+    this.tutorialBtn = this.add
+      .text(w / 2, h / 2 + this.u * 0.39, "tutorial", { fontFamily: MONO, fontSize: px * 0.8, color: "#fcd34d" })
+      .setOrigin(0.5)
+      .setPadding(18, 12, 18, 12) // enlarges the tap target; text stays centered
+      .setInteractive({ useHandCursor: true }); // cursor only — routing happens in the scene pointer handler
+    this.menuUi.add(this.tutorialBtn);
+  }
+
+  destroyMenu() {
+    if (!this.menuUi) return;
+    this.tweens.killAll(); // menu mode has no other tweens; drops the prompt pulse
+    this.menuUi.destroy(true);
+    this.menuUi = null;
+    this.tutorialBtn = null;
+  }
+
+  // Menu -> run happens in place (no restart): the idle sim is already a valid
+  // start state, and the pointer that dismissed the menu can keep acting as
+  // the joystick. Every other entry into a run goes through scene.restart().
+  beginRun() {
+    this.destroyMenu();
+    this.mode = "run";
+    this.elapsed = 0;
+    this.scoreText.setVisible(true);
+    this.hintText.setVisible(true);
+  }
+
+  // ── Tutorial ──────────────────────────────────────────────────────────
+
+  beginTutorial() {
+    this.destroyMenu();
+    this.mode = "tutorial";
+    this.tutStep = 1;
+    this.tutMoveT = 0;
+    this.tutPeaked = false;
+    this.tutRespawning = false;
+    this.tutCaption = this.add
+      .text(0, 0, "", { fontFamily: MONO, color: "#fafafa", align: "center" })
+      .setOrigin(0.5, 0)
+      .setDepth(20);
+    this.tutSkip = this.add
+      .text(0, 0, "skip tutorial →", { fontFamily: MONO, color: "#71717a" })
+      .setOrigin(0.5, 1)
+      .setPadding(18, 12, 18, 12)
+      .setInteractive({ useHandCursor: true })
+      .setDepth(20);
+    this.layoutHud();
+    this.setCaption("move with wasd / arrows — or drag anywhere");
+  }
+
+  setCaption(text: string) {
+    this.tutCaption?.setText(text).setAlpha(0);
+    if (this.tutCaption) this.tweens.add({ targets: this.tutCaption, alpha: 1, duration: 300 });
+  }
+
+  tutTick(dt: number, input: Phaser.Math.Vector2) {
+    if (this.tutStep === 1) {
+      if (input.length() > 0.2) this.tutMoveT += dt;
+      if (this.tutMoveT > 0.7) {
+        this.tutStep = 2;
+        this.setCaption(
+          "now burn hard in one direction —\nthe trail turns amber, then red, and a gray ring marks the limit:\nif your moon crosses it, the run ends. ease off to recover.",
+        );
+      }
+    } else if (this.tutStep === 2) {
+      if (this.danger > 0.6) this.tutPeaked = true;
+      if (this.tutPeaked && this.danger < 0.35) {
+        this.tutStep = 3;
+        this.setCaption("incoming asteroid — dodge it.\nif one touches you or your moon, the run ends.");
+        this.tutSpawnAsteroid();
+      }
+    } else if (this.tutStep === 3) {
+      // Dodged = the rock is clearly past and receding (culling takes too long).
+      const a = this.asteroids[0];
+      const dodged =
+        a &&
+        Math.hypot(a.img.x - this.planet.x, a.img.y - this.planet.y) > 0.3 * this.u &&
+        (this.planet.x - a.img.x) * a.vx + (this.planet.y - a.img.y) * a.vy < 0;
+      if ((this.asteroids.length === 0 || dodged) && !this.tutRespawning) {
+        this.tutStep = 4;
+        this.setCaption("you're ready.");
+        this.time.delayedCall(1100, () => this.scene.restart({ mode: "run" }));
+      }
+    }
+  }
+
+  tutSpawnAsteroid() {
+    // One rock at 1.5x the base speed (still gentle), aimed straight at the planet.
+    this.spawnAsteroid(CONFIG.asteroids.speed[0] * 1.5 * this.u, { x: this.planet.x, y: this.planet.y });
+  }
+
+  tutHit(a: Asteroid, index: number) {
+    this.boom.explode(26, a.img.x, a.img.y);
+    if (!REDUCED_MOTION) this.cameras.main.shake(200, 0.008);
+    a.img.destroy();
+    this.asteroids.splice(index, 1);
+    this.tutRespawning = true;
+    this.setCaption("that would've ended the run.\nhere comes another — dodge it.");
+    this.time.delayedCall(1200, () => {
+      if (this.mode !== "tutorial") return;
+      this.tutRespawning = false;
+      this.tutSpawnAsteroid();
+    });
+  }
+
+  // ── World setup ───────────────────────────────────────────────────────
 
   makeTextures() {
     if (this.textures.exists("disc")) return;
@@ -180,16 +379,12 @@ class GameScene extends Phaser.Scene {
   deriveConstants() {
     const { width: w, height: h } = this.scale;
     this.u = Math.min(w, h);
-    this.planetR = 0.03 * this.u;
-    this.moonR = 0.012 * this.u;
-    this.orbitR0 = 0.18 * this.u;
-    // GM chosen so the starting circular orbit has a ~4 s period. Thrust is
-    // tuned just below the moon's gravity at r0 so burst maneuvers are safe and
-    // only sustained full-throttle burns outrun the moon toward escape
-    // (measured: ~4 s of held thrust escapes, pulsed thrust survives).
-    const T = 4;
-    this.GM = ((2 * Math.PI * this.orbitR0) / T) ** 2 * this.orbitR0;
-    this.thrust = 0.42 * this.u;
+    this.planetR = CONFIG.planet.radius * this.u;
+    this.moonR = CONFIG.moon.radius * this.u;
+    this.orbitR0 = CONFIG.moon.orbitRadius * this.u;
+    // GM follows from the configured circular-orbit period at orbitR0.
+    this.GM = ((2 * Math.PI * this.orbitR0) / CONFIG.moon.period) ** 2 * this.orbitR0;
+    this.thrust = CONFIG.planet.thrust * this.u;
     this.E0 = -this.GM / (2 * this.orbitR0);
   }
 
@@ -204,6 +399,11 @@ class GameScene extends Phaser.Scene {
     const px = Math.max(16, Math.round(this.u * 0.032));
     this.scoreText.setFontSize(px).setPosition(w / 2, Math.max(16, this.u * 0.03));
     this.hintText.setFontSize(Math.max(12, Math.round(px * 0.55))).setPosition(w / 2, h - Math.max(16, this.u * 0.03));
+    this.tutCaption
+      ?.setFontSize(Math.max(13, Math.round(px * 0.7)))
+      .setWordWrapWidth(w * 0.9)
+      .setPosition(w / 2, Math.max(16, this.u * 0.04));
+    this.tutSkip?.setFontSize(Math.max(12, Math.round(px * 0.55))).setPosition(w / 2, h - Math.max(10, this.u * 0.02));
   }
 
   handleResize() {
@@ -220,6 +420,10 @@ class GameScene extends Phaser.Scene {
     }
     this.applySizes();
     this.layoutHud();
+    if (this.mode === "menu") {
+      this.destroyMenu();
+      this.buildMenu();
+    }
     this.planet.x = Phaser.Math.Clamp(this.planet.x, this.planetR, w - this.planetR);
     this.planet.y = Phaser.Math.Clamp(this.planet.y, this.planetR, h - this.planetR);
   }
@@ -235,22 +439,27 @@ class GameScene extends Phaser.Scene {
     return v;
   }
 
+  // ── Frame loop ────────────────────────────────────────────────────────
+
   update(_time: number, deltaMs: number) {
     const dt = Math.min(deltaMs, 50) / 1000;
-    if (this.over) return;
-    this.elapsed += dt;
-    this.scoreText.setText(`${Math.floor(this.elapsed)}s`);
+    if (this.mode === "over") return;
+    const playerControlled = this.mode === "run" || this.mode === "tutorial";
+    if (this.mode === "run") {
+      this.elapsed += dt;
+      this.scoreText.setText(`${Math.floor(this.elapsed)}s`);
+    }
 
     const { width: w, height: h } = this.scale;
-    const input = this.inputVector();
-    if (this.hintText.alpha === 1 && input.length() > 0) {
+    const input = playerControlled ? this.inputVector() : new Phaser.Math.Vector2();
+    if (this.mode === "run" && this.hintText.alpha === 1 && input.length() > 0) {
       this.tweens.add({ targets: this.hintText, alpha: 0, duration: 400 });
     }
 
     // --- Planet: thrust + momentum, mild damping, hard walls.
     this.pv.x += input.x * this.thrust * dt;
     this.pv.y += input.y * this.thrust * dt;
-    const damp = Math.exp(-1.3 * dt);
+    const damp = Math.exp(-CONFIG.planet.damping * dt);
     this.pv.scale(damp);
     this.planet.x += this.pv.x * dt;
     this.planet.y += this.pv.y * dt;
@@ -284,31 +493,45 @@ class GameScene extends Phaser.Scene {
       this.moon.y += this.mv.y * hdt;
     }
 
-    // --- Escape telegraph: specific orbital energy relative to the planet.
+    // --- Escape telegraph. Two signals, and the color shows the worse one:
+    // energy (leading indicator — high relative speed reads as danger before
+    // the moon strays) and distance to the ring (the actual loss line, so the
+    // trail is guaranteed red exactly when the moon reaches it).
+    const ring = CONFIG.escape.ring;
     const rdx = this.moon.x - this.planet.x;
     const rdy = this.moon.y - this.planet.y;
     const r = Math.hypot(rdx, rdy);
     const relV2 = (this.mv.x - this.pv.x) ** 2 + (this.mv.y - this.pv.y) ** 2;
     const E = relV2 / 2 - this.GM / r;
-    const target = clamp01(1 - E / this.E0); // E0 (bound) -> 0, E=0 (escape) -> 1
+    const energyDanger = clamp01(1 - E / this.E0); // E0 (bound) -> 0, E=0 (escape energy) -> 1
+    const distDanger = clamp01((r / this.orbitR0 - ring.fadeStart) / (ring.radius - ring.fadeStart));
+    const target = Math.max(energyDanger, distDanger);
     this.danger += (target - this.danger) * Math.min(1, dt * 10);
     // ponytail: gravity alone is conservative — every thrust pulse pumps orbital
     // energy and it never relaxes, so E random-walks to escape and the game is
     // unplayable. Mid-danger-zone only, bleed the moon's velocity toward the
     // planet's so grazes recover; the assist fades out near the red line, so a
     // sustained burn punches through and escape stays reachable.
-    if (target > 0.5 && target < 0.95) {
-      const strength = 0.55 * Math.sin(Math.PI * ((target - 0.5) / 0.45));
-      const f = 1 - Math.exp(-strength * dt);
+    const [zoneLo, zoneHi] = CONFIG.escape.assistZone;
+    let assist = 0;
+    if (this.mode === "tutorial") {
+      // Tutorial can't be failed: the assist stays on past the red line, always
+      // reels the moon back in, and floors low enough (0.25) that step 2's
+      // "recover below 0.35 danger" completes on its own once you ease off.
+      if (target > 0.25) assist = 1.2 * CONFIG.escape.assistStrength * ((target - 0.25) / 0.75);
+    } else if (target > zoneLo && target < zoneHi) {
+      assist = CONFIG.escape.assistStrength * Math.sin(Math.PI * ((target - zoneLo) / (zoneHi - zoneLo)));
+    }
+    if (assist > 0) {
+      const f = 1 - Math.exp(-assist * dt);
       this.mv.x += (this.pv.x - this.mv.x) * f;
       this.mv.y += (this.pv.y - this.mv.y) * f;
     }
-    // E must stay past escape for a beat before it counts: the trail has long
-    // gone red by then, and a grazing spike can still be reeled back in.
-    this.escapeT = E >= 0 ? this.escapeT + dt : 0;
-    if (this.escapeT > 0.75) return this.gameOver("your moon escaped");
+    // Loss line: the moon crossing the ring ends the run. One rule, and it is
+    // exactly the circle the player can see.
+    if (this.mode === "run" && r > ring.radius * this.orbitR0) return this.gameOver("your moon drifted too far");
 
-    // --- Moon trail (also the escape telegraph: zinc -> amber -> red).
+    // --- Moon trail (escape telegraph #1: zinc -> amber -> red).
     this.trailT += dt;
     if (this.trailT > 0.025) {
       this.trailT = 0;
@@ -316,6 +539,15 @@ class GameScene extends Phaser.Scene {
       if (this.trail.length > 40) this.trail.shift();
     }
     this.trailGfx.clear();
+    // --- Limit ring (escape telegraph #2): fades in as the moon strays far.
+    const ringTarget = playerControlled
+      ? clamp01((r / this.orbitR0 - ring.fadeStart) / (ring.fadeEnd - ring.fadeStart))
+      : 0;
+    this.ringA += (ringTarget - this.ringA) * Math.min(1, dt * 8);
+    if (this.ringA > 0.02) {
+      this.trailGfx.lineStyle(Math.max(1.5, this.moonR * 0.15), GRAY, 0.35 * this.ringA);
+      this.trailGfx.strokeCircle(this.planet.x, this.planet.y, ring.radius * this.orbitR0);
+    }
     const col = dangerColor(this.danger);
     for (let i = 1; i < this.trail.length; i++) {
       this.trailGfx.lineStyle(this.moonR * 0.8 * (i / this.trail.length), col, 0.6 * (i / this.trail.length));
@@ -323,12 +555,15 @@ class GameScene extends Phaser.Scene {
     }
     this.moon.setTint(this.danger > 0.5 ? col : WHITE);
 
-    // --- Asteroids: ramping spawns, straight drift, circle-circle collisions.
-    const ramp = clamp01(this.elapsed / 90);
-    this.spawnT -= dt;
-    if (this.spawnT <= 0 && this.asteroids.length < 40) {
-      this.spawnT = lerp(1.2, 0.35, ramp);
-      this.spawnAsteroid(lerp(0.08, 0.22, ramp) * this.u * lerp(0.75, 1.25, Math.random()));
+    // --- Asteroids: ramping spawns (run only), straight drift, circle-circle collisions.
+    const ast = CONFIG.asteroids;
+    if (this.mode === "run") {
+      const ramp = clamp01(this.elapsed / ast.rampTime);
+      this.spawnT -= dt;
+      if (this.spawnT <= 0 && this.asteroids.length < ast.max) {
+        this.spawnT = lerp(ast.interval[0], ast.interval[1], ramp);
+        this.spawnAsteroid(lerp(ast.speed[0], ast.speed[1], ramp) * this.u * lerp(0.75, 1.25, Math.random()));
+      }
     }
     const cull = 0.12 * this.u;
     for (let i = this.asteroids.length - 1; i >= 0; i--) {
@@ -344,15 +579,21 @@ class GameScene extends Phaser.Scene {
       const hitPlanet = Math.hypot(a.img.x - this.planet.x, a.img.y - this.planet.y) < a.r + this.planetR;
       const hitMoon = Math.hypot(a.img.x - this.moon.x, a.img.y - this.moon.y) < a.r + this.moonR;
       if (hitPlanet || hitMoon) {
+        if (this.mode === "tutorial") {
+          this.tutHit(a, i);
+          continue;
+        }
         this.boom.explode(26, a.img.x, a.img.y);
         if (!REDUCED_MOTION) this.cameras.main.shake(250, 0.012);
         return this.gameOver("smashed by an asteroid");
       }
     }
 
+    if (this.mode === "tutorial") this.tutTick(dt, input);
+
     // --- Joystick overlay.
     this.joyGfx.clear();
-    if (this.joyId !== null) {
+    if (this.joyId !== null && playerControlled) {
       const jr = this.u * 0.07;
       this.joyGfx.lineStyle(2, GRAY, 0.5).strokeCircle(this.joyBase.x, this.joyBase.y, jr);
       this.joyGfx
@@ -361,9 +602,9 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  spawnAsteroid(speed: number) {
+  spawnAsteroid(speed: number, aim?: { x: number; y: number }) {
     const { width: w, height: h } = this.scale;
-    const r = this.u * lerp(0.008, 0.02, Math.random());
+    const r = this.u * lerp(CONFIG.asteroids.radius[0], CONFIG.asteroids.radius[1], Math.random());
     const edge = Phaser.Math.Between(0, 3);
     const pad = r + 2;
     let x = 0;
@@ -372,8 +613,11 @@ class GameScene extends Phaser.Scene {
     else if (edge === 1) [x, y] = [Math.random() * w, h + pad];
     else if (edge === 2) [x, y] = [-pad, Math.random() * h];
     else [x, y] = [w + pad, Math.random() * h];
-    // Aim at a random point in the central 60% of the screen — inward bias.
-    const t = new Phaser.Math.Vector2(w * lerp(0.2, 0.8, Math.random()), h * lerp(0.2, 0.8, Math.random()));
+    // Default aim: a random point in the central 60% of the screen — inward bias.
+    const t = new Phaser.Math.Vector2(
+      aim?.x ?? w * lerp(0.2, 0.8, Math.random()),
+      aim?.y ?? h * lerp(0.2, 0.8, Math.random()),
+    );
     const dir = t.subtract({ x, y }).normalize();
     const img = this.add
       .image(x, y, "rock")
@@ -401,7 +645,7 @@ class GameScene extends Phaser.Scene {
   }
 
   gameOver(reason: string) {
-    this.over = true;
+    this.mode = "over";
     this.joyId = null;
     this.joyGfx.clear();
     const { width: w, height: h } = this.scale;
@@ -429,11 +673,13 @@ class GameScene extends Phaser.Scene {
     );
     this.tweens.add({ targets: ui, alpha: 1, duration: 350 });
     // Small delay so a death-frame tap doesn't skip the score screen.
+    // Restart drops straight back into a run — the menu only shows on page load.
     this.time.delayedCall(400, () => {
-      this.input.once("pointerdown", () => this.scene.restart());
-      this.input.keyboard!.once("keydown-R", () => this.scene.restart());
-      this.input.keyboard!.once("keydown-SPACE", () => this.scene.restart());
-      this.input.keyboard!.once("keydown-ENTER", () => this.scene.restart());
+      const restart = () => this.scene.restart({ mode: "run" });
+      this.input.once("pointerdown", restart);
+      this.input.keyboard!.once("keydown-R", restart);
+      this.input.keyboard!.once("keydown-SPACE", restart);
+      this.input.keyboard!.once("keydown-ENTER", restart);
     });
   }
 }
