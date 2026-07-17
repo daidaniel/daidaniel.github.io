@@ -1,6 +1,6 @@
 # daidaniel.github.io
 
-Personal website for Daniel Dai, built with [Astro](https://astro.build). A single-page, static site — no client-side JavaScript.
+Personal website for Daniel Dai, built with [Astro](https://astro.build). Static site; every page except the `/orbit` game ships zero client-side JavaScript.
 
 ## Commands
 
@@ -16,6 +16,7 @@ Personal website for Daniel Dai, built with [Astro](https://astro.build). A sing
 
 ```
 ├── .github/workflows/deploy.yml   GitHub Pages deployment
+├── docs/orbit.md                  Orbit game: mechanics, physics, tuning, verification
 ├── public/
 │   ├── DanielDai-Resume.pdf       Résumé (served at /DanielDai-Resume.pdf)
 │   └── favicon.svg
@@ -23,10 +24,11 @@ Personal website for Daniel Dai, built with [Astro](https://astro.build). A sing
 │   ├── assets/keyboard.svg        Keyboard illustration on the homepage (served as-is)
 │   ├── assets/shadow.svg          Long shadow of the keyboard's base, pre-extruded in the SVG
 │   ├── assets/share.png           1200×630 social image, rasterized to JPG for og:image at build
-│   ├── components/TextLink.astro  Amber inline link
+│   ├── components/                Section.astro (full-viewport block), TextLink.astro (amber inline link)
 │   ├── layouts/Base.astro         Shared head and footer
-│   ├── pages/                     index.astro and 404.astro
-│   └── styles/global.css          Palette variables and base styles
+│   ├── pages/                     index.astro, 404.astro, orbit.astro (the game page)
+│   ├── scripts/orbit.ts           Orbit game code (Phaser 3.90)
+│   └── styles/global.css          Tailwind entry and custom animation utilities
 └── astro.config.mjs               Site URL and self-hosted fonts (Inter, JetBrains Mono)
 ```
 

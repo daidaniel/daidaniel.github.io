@@ -1,0 +1,36 @@
+---
+import { Font } from "astro:assets";
+import "../styles/global.css";
+
+// Standalone document (not Base.astro): the game page must not scroll, has no
+// footer, and needs its own mobile hygiene. Phaser mounts into #game.
+const description = "orbit — a tiny survival game. thrust your planet around, keep your moon, dodge asteroids.";
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="generator" content={Astro.generator} />
+    <title>orbit · Daniel Dai</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#000000" />
+    <Font cssVariable="--font-inter" preload />
+    <Font cssVariable="--font-jetbrains-mono" preload />
+  </head>
+  <body class="overflow-hidden overscroll-none bg-black font-(family-name:--font-inter) text-zinc-50 antialiased">
+    <div id="game" class="fixed inset-0 touch-none select-none"></div>
+    <a
+      href="/"
+      class="fixed left-3 top-3 z-10 p-2 text-sm text-zinc-500 transition-colors hover:text-amber-300 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-amber-300"
+      >← daniel dai</a
+    >
+    <script>
+      import "../scripts/orbit";
+    </script>
+  </body>
+</html>
