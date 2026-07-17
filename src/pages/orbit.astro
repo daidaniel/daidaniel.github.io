@@ -18,11 +18,11 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <meta name="theme-color" content="#18181b" />
+    <meta name="theme-color" content="#000000" />
     <Font cssVariable="--font-inter" preload />
     <Font cssVariable="--font-jetbrains-mono" preload />
   </head>
-  <body class="overflow-hidden overscroll-none bg-zinc-900 font-(family-name:--font-inter) text-zinc-50 antialiased">
+  <body class="overflow-hidden overscroll-none bg-black font-(family-name:--font-inter) text-zinc-50 antialiased">
     <div id="game" class="fixed inset-0 touch-none select-none"></div>
     <a
       href="/"

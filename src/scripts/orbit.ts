@@ -16,12 +16,13 @@ const CONFIG = {
     orbitRadius: 0.18, // ×u — starting circular orbit radius
     period: 6, // s per starting orbit; sets GM, so binding strength too
     softening: 2, // ×planet.radius — gravity softening; higher = gentler close flybys
+    gravityFalloff: 1.5, // a ∝ 1/r^n; 2 = real inverse-square. Lower = flatter force curve (keep within ~1.1–2)
   },
   escape: {
     // The gray ring is the loss line: the moon crossing ring.radius ends the
     // run. Its alpha fades in from fadeStart to fadeEnd (both ×orbitRadius).
-    ring: { radius: 2.5, fadeStart: 1.4, fadeEnd: 2.2 },
-    assistZone: [0.5, 0.95], // danger range where the recovery assist acts
+    ring: { radius: 2.8, fadeStart: 1.5, fadeEnd: 2.5 },
+    assistZone: [0.35, 0.95], // energy-danger range where the recovery assist acts
     assistStrength: 0.55, // 1/s peak bleed of moon velocity toward the planet's
   },
   asteroids: {
@@ -34,8 +35,8 @@ const CONFIG = {
   },
 };
 
-// Palette: the site's zinc/amber Tailwind colors.
-const BG = 0x18181b; // zinc-900
+// Palette: pure-black space, objects in the site's zinc/amber Tailwind colors.
+const BG = 0x000000;
 const AMBER = 0xfcd34d; // amber-300
 const WHITE = 0xfafafa; // zinc-50
 const GRAY = 0x71717a; // zinc-500
@@ -103,12 +104,15 @@ class GameScene extends Phaser.Scene {
   tutorialBtn: Phaser.GameObjects.Text | null = null;
 
   // Tutorial state (mode "tutorial" only).
-  tutStep = 0;
-  tutStepAt = 0; // time.now when the current caption appeared (enforces min dwell)
+  tutStep = 0; // 1-based index into tutSteps
+  tutStepAt = 0; // time.now when the current caption appeared (dwell / timers)
   tutMoveT = 0;
+  tutArmed = false; // burn step: danger must dip below 0.4 after entry before >0.6 counts
+  tutInterrupted = 0; // step to re-enter after the moon-loss caption; 0 = none
   tutRespawning = false;
   tutCaption: Phaser.GameObjects.Text | null = null;
   tutSkip: Phaser.GameObjects.Text | null = null;
+  moonActive = true; // false only during tutorial step 1 (move without moon)
 
   keys!: Record<string, Phaser.Input.Keyboard.Key>;
   joyId: number | null = null;
@@ -144,7 +148,9 @@ class GameScene extends Phaser.Scene {
     this.tutorialBtn = null;
     this.tutCaption = null;
     this.tutSkip = null;
+    this.tutInterrupted = 0;
     this.restarting = false;
+    this.moonActive = true; // the fresh moon image below is visible by default
 
     this.makeTextures();
     this.deriveConstants();
@@ -178,7 +184,7 @@ class GameScene extends Phaser.Scene {
 
     // Moon starts on a circular orbit around the planet.
     this.moon.setPosition(this.planet.x + this.orbitR0, this.planet.y);
-    this.mv.set(0, -Math.sqrt(this.GM / this.orbitR0));
+    this.mv.set(0, -this.circSpeed(this.orbitR0));
     this.applySizes();
 
     this.scoreText = this.add.text(0, 0, "0", { fontFamily: MONO, color: "#fafafa" }).setOrigin(0.5, 0).setDepth(10);
@@ -231,7 +237,7 @@ class GameScene extends Phaser.Scene {
     this.scale.on("resize", onResize);
     this.events.once("shutdown", () => this.scale.off("resize", onResize));
 
-    if (this.mode === "run") this.cameras.main.fadeIn(400, 24, 24, 27);
+    if (this.mode === "run") this.cameras.main.fadeIn(400);
     if (import.meta.env.DEV) {
       this.debugLog = [];
       this.debugHud = null;
@@ -246,7 +252,7 @@ class GameScene extends Phaser.Scene {
   fadeRestart() {
     if (this.restarting) return;
     this.restarting = true;
-    this.cameras.main.fadeOut(300, 24, 24, 27);
+    this.cameras.main.fadeOut(300);
     this.cameras.main.once("camerafadeoutcomplete", () => this.scene.restart({ mode: "run" }));
   }
 
@@ -304,12 +310,71 @@ class GameScene extends Phaser.Scene {
   }
 
   // ── Tutorial ──────────────────────────────────────────────────────────
+  // Data-driven step machine. Two kinds of step: timed teaching captions
+  // (advance after `time` ms, no gate) and gated action steps (advance when
+  // `done` holds — evaluated only after a 1.5 s dwell, and each gate is
+  // designed to require the condition freshly after entry so a pre-met
+  // condition can't flash a step past).
+
+  tutSteps: {
+    caption: string;
+    time?: number;
+    enter?: () => void;
+    done?: (dt: number, input: Phaser.Math.Vector2) => boolean;
+  }[] = [
+    {
+      caption: "move with wasd / arrows — or drag anywhere",
+      enter: () => {
+        this.tutMoveT = 0;
+        this.setMoonActive(false);
+      },
+      done: (dt, input) => {
+        if (input.length() > 0.2) this.tutMoveT += dt;
+        return this.tutMoveT > 0.7;
+      },
+    },
+    {
+      caption: "this is your moon.\ngravity keeps it circling you.",
+      time: 3000,
+      enter: () => this.setMoonActive(true),
+    },
+    { caption: "only gravity holds it.\nmove gently — short taps, not long burns.", time: 3500 },
+    {
+      caption: "now burn hard in one direction —\npush the trail to red.",
+      enter: () => (this.tutArmed = false),
+      done: () => {
+        if (this.danger < 0.4) this.tutArmed = true;
+        return this.tutArmed && this.danger > 0.6;
+      },
+    },
+    { caption: "good. ease off — let your moon settle.", done: () => this.danger < 0.35 },
+    {
+      caption: "incoming asteroid — dodge it.\nif one touches you or your moon, the run ends.",
+      enter: () => {
+        for (const a of this.asteroids) a.img.destroy();
+        this.asteroids.length = 0;
+        this.tutRespawning = false;
+        this.tutSpawnAsteroid();
+      },
+      done: () => {
+        // Dodged = fully off-screen AND receding — the spawn point itself can
+        // legally sit off-screen, so "outside" alone would pass an inbound rock.
+        const a = this.asteroids[0];
+        if (!a || this.tutRespawning) return false;
+        const { width: w, height: h } = this.scale;
+        const outside = a.img.x < -a.r || a.img.x > w + a.r || a.img.y < -a.r || a.img.y > h + a.r;
+        return outside && (this.planet.x - a.img.x) * a.vx + (this.planet.y - a.img.y) * a.vy < 0;
+      },
+    },
+    { caption: "nice. in a real run they keep coming —\nfaster, from every edge.", time: 2800 },
+    { caption: "you're ready.", enter: () => this.time.delayedCall(1100, () => this.fadeRestart()) },
+  ];
 
   beginTutorial() {
     this.destroyMenu();
     this.mode = "tutorial";
-    this.tutMoveT = 0;
     this.tutRespawning = false;
+    this.tutInterrupted = 0;
     this.tutCaption = this.add
       .text(0, 0, "", { fontFamily: MONO, color: "#fafafa", align: "center" })
       .setOrigin(0.5, 0)
@@ -321,13 +386,15 @@ class GameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .setDepth(20);
     this.layoutHud();
-    this.tutAdvance(1, "move with wasd / arrows — or drag anywhere");
+    this.tutEnter(1);
   }
 
-  tutAdvance(step: number, caption: string) {
+  tutEnter(step: number) {
     this.tutStep = step;
     this.tutStepAt = this.time.now;
-    this.setCaption(caption);
+    const s = this.tutSteps[step - 1];
+    s.enter?.();
+    this.setCaption(s.caption);
   }
 
   setCaption(text: string) {
@@ -336,33 +403,53 @@ class GameScene extends Phaser.Scene {
   }
 
   tutTick(dt: number, input: Phaser.Math.Vector2) {
-    if (this.time.now - this.tutStepAt < 1500) return; // every caption gets read before its gate can pass
-    if (this.tutStep === 1) {
-      if (input.length() > 0.2) this.tutMoveT += dt;
-      if (this.tutMoveT > 0.7) this.tutAdvance(2, "now burn hard in one direction —\npush the trail to red.");
-    } else if (this.tutStep === 2) {
-      if (this.danger > 0.6)
-        this.tutAdvance(
-          3,
-          "good. ease off — let your moon settle.\nthe gray ring is the limit: cross it in a real run and it's gone.",
-        );
-    } else if (this.tutStep === 3) {
-      if (this.danger < 0.35) {
-        this.tutAdvance(4, "incoming asteroid — dodge it.\nif one touches you or your moon, the run ends.");
-        this.tutSpawnAsteroid();
+    const inStep = this.time.now - this.tutStepAt;
+    if (this.tutInterrupted) {
+      // Moon-loss caption is showing; when it's been read, retry the step.
+      if (inStep > 2800) {
+        const back = this.tutInterrupted;
+        this.tutInterrupted = 0;
+        this.tutEnter(back);
       }
-    } else if (this.tutStep === 4) {
-      // Dodged = the rock is clearly past and receding (culling takes too long).
-      const a = this.asteroids[0];
-      const dodged =
-        a &&
-        Math.hypot(a.img.x - this.planet.x, a.img.y - this.planet.y) > 0.3 * this.u &&
-        (this.planet.x - a.img.x) * a.vx + (this.planet.y - a.img.y) * a.vy < 0;
-      if ((this.asteroids.length === 0 || dodged) && !this.tutRespawning) {
-        this.tutAdvance(5, "you're ready.");
-        this.time.delayedCall(1100, () => this.fadeRestart());
-      }
+      return;
     }
+    const s = this.tutSteps[this.tutStep - 1];
+    if (s.time) {
+      if (inStep > s.time) this.tutEnter(this.tutStep + 1);
+    } else if (s.done && inStep > 1500 && s.done(dt, input) && this.tutStep < this.tutSteps.length) {
+      this.tutEnter(this.tutStep + 1);
+    }
+  }
+
+  setMoonActive(on: boolean) {
+    this.moonActive = on;
+    this.moon.setVisible(on);
+    this.trail.length = 0;
+    this.trailGfx.clear();
+    if (on) this.resetMoon();
+  }
+
+  // Fresh circular orbit around the planet's current position and velocity,
+  // with a pop-in. Used when the tutorial introduces or replaces the moon.
+  resetMoon() {
+    this.moon.setPosition(this.planet.x + this.orbitR0, this.planet.y);
+    this.mv.set(this.pv.x, this.pv.y - this.circSpeed(this.orbitR0));
+    this.trail.length = 0;
+    this.danger = 0;
+    this.applySizes();
+    const b = this.moon.scaleX;
+    this.moon.setScale(0);
+    this.tweens.add({ targets: this.moon, scaleX: b, scaleY: b, duration: 300, ease: "Back.Out" });
+  }
+
+  // The tutorial has no game over: crossing the ring swaps in a fresh moon,
+  // explains, and retries the step (recover retries from burn — a fresh moon
+  // has nothing to recover).
+  tutMoonLoss() {
+    this.tutInterrupted = this.tutStep === 5 ? 4 : this.tutStep;
+    this.tutStepAt = this.time.now;
+    this.resetMoon();
+    this.setCaption("you lost your moon — in a real run, that ends it.\nhere's a new one.");
   }
 
   tutSpawnAsteroid() {
@@ -388,7 +475,8 @@ class GameScene extends Phaser.Scene {
     this.tutRespawning = true;
     this.setCaption("that would've ended the run.\nhere comes another — dodge it.");
     this.time.delayedCall(1200, () => {
-      if (this.mode !== "tutorial") return;
+      // A moon-loss interrupt re-enters the dodge step and spawns its own rock.
+      if (this.mode !== "tutorial" || this.tutInterrupted || !this.tutRespawning) return;
       this.tutRespawning = false;
       this.tutSpawnAsteroid();
     });
@@ -422,10 +510,19 @@ class GameScene extends Phaser.Scene {
     this.planetR = CONFIG.planet.radius * this.u;
     this.moonR = CONFIG.moon.radius * this.u;
     this.orbitR0 = CONFIG.moon.orbitRadius * this.u;
-    // GM follows from the configured circular-orbit period at orbitR0.
-    this.GM = ((2 * Math.PI * this.orbitR0) / CONFIG.moon.period) ** 2 * this.orbitR0;
+    // GM follows from the configured circular-orbit period at orbitR0,
+    // generalized for a ∝ 1/r^n: v_circ(r)² = GM / r^(n-1). E0 is the specific
+    // orbital energy of the starting circular orbit — negative (bound) because
+    // gravityFalloff > 1, which the potential formula requires.
+    const n = CONFIG.moon.gravityFalloff;
+    const v0 = (2 * Math.PI * this.orbitR0) / CONFIG.moon.period;
+    this.GM = v0 ** 2 * Math.pow(this.orbitR0, n - 1);
     this.thrust = CONFIG.planet.thrust * this.u;
-    this.E0 = -this.GM / (2 * this.orbitR0);
+    this.E0 = v0 ** 2 * (0.5 - 1 / (n - 1));
+  }
+
+  circSpeed(r: number): number {
+    return Math.sqrt(this.GM / Math.pow(r, CONFIG.moon.gravityFalloff - 1));
   }
 
   applySizes() {
@@ -526,83 +623,9 @@ class GameScene extends Phaser.Scene {
       this.exhaust.emitParticleAt(this.planet.x - n.x * this.planetR, this.planet.y - n.y * this.planetR, 1);
     }
 
-    // --- Moon: inverse-square gravity, semi-implicit Euler (v before p), substepped.
-    // Softening caps close-pass acceleration (no slingshot flings, no numeric blow-up).
-    const eps2 = (CONFIG.moon.softening * this.planetR) ** 2;
-    const steps = 4;
-    const hdt = dt / steps;
-    for (let i = 0; i < steps; i++) {
-      const dx = this.moon.x - this.planet.x;
-      const dy = this.moon.y - this.planet.y;
-      const r2 = dx * dx + dy * dy + eps2;
-      const invR3 = 1 / (r2 * Math.sqrt(r2));
-      this.mv.x += -this.GM * dx * invR3 * hdt;
-      this.mv.y += -this.GM * dy * invR3 * hdt;
-      this.moon.x += this.mv.x * hdt;
-      this.moon.y += this.mv.y * hdt;
-    }
-
-    // --- Escape telegraph. Two signals, and the color shows the worse one:
-    // energy (leading indicator — high relative speed reads as danger before
-    // the moon strays) and distance to the ring (the actual loss line, so the
-    // trail is guaranteed red exactly when the moon reaches it).
-    const ring = CONFIG.escape.ring;
-    const rdx = this.moon.x - this.planet.x;
-    const rdy = this.moon.y - this.planet.y;
-    const r = Math.hypot(rdx, rdy);
-    const relV2 = (this.mv.x - this.pv.x) ** 2 + (this.mv.y - this.pv.y) ** 2;
-    const E = relV2 / 2 - this.GM / r;
-    const energyDanger = clamp01(1 - E / this.E0); // E0 (bound) -> 0, E=0 (escape energy) -> 1
-    const distDanger = clamp01((r / this.orbitR0 - ring.fadeStart) / (ring.radius - ring.fadeStart));
-    const target = Math.max(energyDanger, distDanger);
-    this.danger += (target - this.danger) * Math.min(1, dt * 10);
-    // ponytail: gravity alone is conservative — every thrust pulse pumps orbital
-    // energy and it never relaxes, so E random-walks to escape and the game is
-    // unplayable. Mid-danger-zone only, bleed the moon's velocity toward the
-    // planet's so grazes recover; the assist fades out near the red line, so a
-    // sustained burn punches through and escape stays reachable.
-    const [zoneLo, zoneHi] = CONFIG.escape.assistZone;
-    let assist = 0;
-    if (this.mode === "tutorial") {
-      // Tutorial can't be failed: the assist stays on past the red line, always
-      // reels the moon back in, and floors low enough (0.25) that step 2's
-      // "recover below 0.35 danger" completes on its own once you ease off.
-      if (target > 0.25) assist = 1.2 * CONFIG.escape.assistStrength * ((target - 0.25) / 0.75);
-    } else if (energyDanger > zoneLo && energyDanger < zoneHi) {
-      // Keyed to energy only: a moon being dragged out at matched velocity has
-      // low energy danger, so nothing fights the drift toward the loss ring.
-      assist = CONFIG.escape.assistStrength * Math.sin(Math.PI * ((energyDanger - zoneLo) / (zoneHi - zoneLo)));
-    }
-    if (assist > 0) {
-      const f = 1 - Math.exp(-assist * dt);
-      this.mv.x += (this.pv.x - this.mv.x) * f;
-      this.mv.y += (this.pv.y - this.mv.y) * f;
-    }
-    // Loss line: the moon crossing the ring ends the run. One rule, and it is
-    // exactly the circle the player can see.
-    if (this.mode === "run" && r > ring.radius * this.orbitR0) return this.gameOver("your moon drifted too far");
-
-    // --- Moon trail (escape telegraph #1: zinc -> amber -> red).
-    this.trailT += dt;
-    if (this.trailT > 0.025) {
-      this.trailT = 0;
-      this.trail.push({ x: this.moon.x, y: this.moon.y });
-      if (this.trail.length > 40) this.trail.shift();
-    }
-    this.trailGfx.clear();
-    // --- Limit ring (escape telegraph #2): fades in as the moon strays far.
-    const ringTarget = clamp01((r / this.orbitR0 - ring.fadeStart) / (ring.fadeEnd - ring.fadeStart));
-    this.ringA += (ringTarget - this.ringA) * Math.min(1, dt * 8);
-    if (this.ringA > 0.02) {
-      this.trailGfx.lineStyle(Math.max(1.5, this.moonR * 0.15), GRAY, 0.35 * this.ringA);
-      this.trailGfx.strokeCircle(this.planet.x, this.planet.y, ring.radius * this.orbitR0);
-    }
-    const col = dangerColor(this.danger);
-    for (let i = 1; i < this.trail.length; i++) {
-      this.trailGfx.lineStyle(this.moonR * 0.8 * (i / this.trail.length), col, 0.6 * (i / this.trail.length));
-      this.trailGfx.lineBetween(this.trail[i - 1].x, this.trail[i - 1].y, this.trail[i].x, this.trail[i].y);
-    }
-    this.moon.setTint(this.danger > 0.5 ? col : WHITE);
+    // Moon physics + telegraphs + loss live in moonTick; it can end the run.
+    if (this.moonActive) this.moonTick(dt);
+    if ((this.mode as Mode) === "over") return;
 
     // --- Asteroids: ramping spawns (run only), straight drift, circle-circle collisions.
     const ast = CONFIG.asteroids;
@@ -638,10 +661,15 @@ class GameScene extends Phaser.Scene {
         continue;
       }
       const hitPlanet = Math.hypot(a.img.x - this.planet.x, a.img.y - this.planet.y) < a.r + this.planetR;
-      const hitMoon = Math.hypot(a.img.x - this.moon.x, a.img.y - this.moon.y) < a.r + this.moonR;
+      const hitMoon = this.moonActive && Math.hypot(a.img.x - this.moon.x, a.img.y - this.moon.y) < a.r + this.moonR;
       if (hitPlanet || hitMoon) {
         if (this.mode === "tutorial") {
-          this.tutHit(a, i);
+          // During a moon-loss interrupt the leftover rock just disappears —
+          // tutHit would talk over the loss caption.
+          if (this.tutInterrupted) {
+            a.img.destroy();
+            this.asteroids.splice(i, 1);
+          } else this.tutHit(a, i);
           continue;
         }
         this.boom.explode(26, a.img.x, a.img.y);
@@ -661,6 +689,83 @@ class GameScene extends Phaser.Scene {
         .fillStyle(WHITE, 0.5)
         .fillCircle(this.joyBase.x + this.joyVec.x * jr, this.joyBase.y + this.joyVec.y * jr, jr * 0.35);
     }
+  }
+
+  // Everything the moon does in a frame: gravity integration, the two escape
+  // telegraphs, the recovery assist, the ring loss check, trail + ring drawing.
+  moonTick(dt: number) {
+    const n = CONFIG.moon.gravityFalloff;
+    // Semi-implicit Euler (v before p), substepped. Softening caps close-pass
+    // acceleration (no slingshot flings, no numeric blow-up).
+    const eps2 = (CONFIG.moon.softening * this.planetR) ** 2;
+    const steps = 4;
+    const hdt = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      const dx = this.moon.x - this.planet.x;
+      const dy = this.moon.y - this.planet.y;
+      const r2 = dx * dx + dy * dy + eps2;
+      const invRn = Math.pow(r2, -(n + 1) / 2);
+      this.mv.x += -this.GM * dx * invRn * hdt;
+      this.mv.y += -this.GM * dy * invRn * hdt;
+      this.moon.x += this.mv.x * hdt;
+      this.moon.y += this.mv.y * hdt;
+    }
+
+    // Two telegraph signals; the color shows the worse one: energy (leading
+    // indicator — high relative speed reads as danger before the moon strays)
+    // and distance to the ring (the loss line, so the trail is guaranteed red
+    // exactly when the moon reaches it).
+    const ring = CONFIG.escape.ring;
+    const r = Math.hypot(this.moon.x - this.planet.x, this.moon.y - this.planet.y);
+    const relV2 = (this.mv.x - this.pv.x) ** 2 + (this.mv.y - this.pv.y) ** 2;
+    const E = relV2 / 2 - this.GM / ((n - 1) * Math.pow(r, n - 1));
+    const energyDanger = clamp01(1 - E / this.E0); // E0 (bound) -> 0, E=0 (escape energy) -> 1
+    const distDanger = clamp01((r / this.orbitR0 - ring.fadeStart) / (ring.radius - ring.fadeStart));
+    const target = Math.max(energyDanger, distDanger);
+    this.danger += (target - this.danger) * Math.min(1, dt * 10);
+    // ponytail: gravity alone is conservative — every thrust pulse pumps orbital
+    // energy and it never relaxes, so E random-walks to escape and the game is
+    // unplayable. Keyed to energy danger only (a moon dragged out at matched
+    // velocity has low energy danger, so nothing fights the drift toward the
+    // ring), fading out near the red line so sustained burns punch through.
+    const [zoneLo, zoneHi] = CONFIG.escape.assistZone;
+    let assist = 0;
+    if (energyDanger > zoneLo && energyDanger < zoneHi) {
+      assist = CONFIG.escape.assistStrength * Math.sin(Math.PI * ((energyDanger - zoneLo) / (zoneHi - zoneLo)));
+    }
+    if (assist > 0) {
+      const f = 1 - Math.exp(-assist * dt);
+      this.mv.x += (this.pv.x - this.mv.x) * f;
+      this.mv.y += (this.pv.y - this.mv.y) * f;
+    }
+    // Loss line: the moon crossing the ring ends a run; the tutorial swaps in
+    // a fresh moon and explains instead.
+    if (r > ring.radius * this.orbitR0) {
+      if (this.mode === "run") return this.gameOver("your moon drifted too far");
+      if (this.mode === "tutorial" && !this.tutInterrupted) this.tutMoonLoss();
+    }
+
+    // Trail (telegraph #1: zinc -> amber -> red).
+    this.trailT += dt;
+    if (this.trailT > 0.025) {
+      this.trailT = 0;
+      this.trail.push({ x: this.moon.x, y: this.moon.y });
+      if (this.trail.length > 40) this.trail.shift();
+    }
+    this.trailGfx.clear();
+    // Limit ring (telegraph #2): fades in as the moon strays far.
+    const ringTarget = clamp01((r / this.orbitR0 - ring.fadeStart) / (ring.fadeEnd - ring.fadeStart));
+    this.ringA += (ringTarget - this.ringA) * Math.min(1, dt * 8);
+    if (this.ringA > 0.02) {
+      this.trailGfx.lineStyle(Math.max(1.5, this.moonR * 0.15), GRAY, 0.35 * this.ringA);
+      this.trailGfx.strokeCircle(this.planet.x, this.planet.y, ring.radius * this.orbitR0);
+    }
+    const col = dangerColor(this.danger);
+    for (let i = 1; i < this.trail.length; i++) {
+      this.trailGfx.lineStyle(this.moonR * 0.8 * (i / this.trail.length), col, 0.6 * (i / this.trail.length));
+      this.trailGfx.lineBetween(this.trail[i - 1].x, this.trail[i - 1].y, this.trail[i].x, this.trail[i].y);
+    }
+    this.moon.setTint(this.danger > 0.5 ? col : WHITE);
 
     if (import.meta.env.DEV) this.debugTick(dt, r, Math.sqrt(relV2), E, assist);
   }
